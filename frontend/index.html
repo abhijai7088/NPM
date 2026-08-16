@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/nicsi-logo.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="NICSI Project Monitoring System — Track, manage and monitor all government IT projects." />
+    <title>NPMS — NICSI Project Monitoring System</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script async defer src="https://translation-plugin.bhashini.co.in/v2/website_translation_utility.js" data-pos-x="10" data-pos-y="10"></script>
+    <style>
+      /* ═══ Bhashini Widget Styling ═══ */
+      
+      /* When inside the govt blue bar */
+      .bhashini-topbar > div,
+      .bhashini-topbar select {
+        position: static !important;
+        background: rgba(255,255,255,0.14) !important;
+        color: white !important;
+        border: 1px solid rgba(255,255,255,0.1) !important;
+        font-size: 0.75rem !important;
+        font-family: 'Inter', sans-serif !important;
+        padding: 1px 5px !important;
+        border-radius: 2px !important;
+        box-shadow: none !important;
+        height: auto !important;
+        min-width: 90px !important;
+        width: auto !important;
+        outline: none !important;
+        cursor: pointer;
+        line-height: 1.4 !important;
+        letter-spacing: 0.2px !important;
+        -webkit-appearance: none !important;
+        appearance: none !important;
+      }
+
+      .bhashini-topbar select:hover,
+      .bhashini-topbar select:focus {
+        background: rgba(255,255,255,0.22) !important;
+        
+      }
+
+      /* Dropdown options - MUST be readable with proper font size */
+      .bhashini-topbar select option {
+        color: #1a237e !important;
+        
+        font-size: 14px !important;
+        padding: 8px 14px !important;
+        font-family: 'Inter', sans-serif !important;
+        line-height: 1.6 !important;
+      }
+
+      /* Remove the forced scale and ensure overflow is visible */
+      .bhashini-topbar * {
+        z-index: 99999 !important;
+      }
+
+      /* Bhashini on login page
+      .bhashini-login > div,
+      .bhashini-login select {
+        position: static !important;
+        background: white !important;
+        color: #1a237e !important;
+        
+        font-size: 0.54rem !important;
+        font-family: 'Inter', sans-serif !important;
+        padding: 1px 2px !important;
+        border-radius: 0px !important;
+        
+        outline: none !important;
+        cursor: pointer;
+      } */
+
+      /* Focus outline for skip-to-content target */
+      #main-content:focus {
+        outline: none;
+      }
+    </style>
+    <script>
+      let bhashiniWidget = null;
+      // Automatically relocate the floating Bhashini widget into the govt bar target
+      const observer = new MutationObserver(() => {
+        const target = document.getElementById('bhashini-target');
+        
+        if (!bhashiniWidget) {
+          const children = document.body.children;
+          for (let i = 0; i < children.length; i++) {
+            const el = children[i];
+            if (el.tagName === 'DIV' && el.id !== 'root' && el.className !== 'login-left__bg') {
+              const position = window.getComputedStyle(el).position;
+              if (position === 'fixed' || position === 'absolute') {
+                bhashiniWidget = el;
+                break;
+              }
+            }
+          }
+        }
+
+        if (bhashiniWidget) {
+          if (!document.body.contains(bhashiniWidget)) {
+            document.body.appendChild(bhashiniWidget);
+          }
+
+          if (target && bhashiniWidget.parentElement !== target) {
+            // Place it naturally - NO scaling down, NO absolute positioning
+            bhashiniWidget.style.setProperty('position', 'relative', 'important');
+            bhashiniWidget.style.setProperty('top', 'auto', 'important');
+            bhashiniWidget.style.setProperty('right', 'auto', 'important');
+            bhashiniWidget.style.setProperty('bottom', 'auto', 'important');
+            bhashiniWidget.style.setProperty('left', 'auto', 'important');
+            bhashiniWidget.style.setProperty('transform', 'none', 'important');
+            bhashiniWidget.style.setProperty('margin', '0', 'important');
+            bhashiniWidget.style.setProperty('display', 'inline-flex', 'important');
+            bhashiniWidget.style.setProperty('align-items', 'center', 'important');
+            bhashiniWidget.style.setProperty('z-index', '99999', 'important');
+            target.appendChild(bhashiniWidget);
+          } else if (!target) {
+            // Hide on login page, but keep in body so React doesn't destroy it
+            bhashiniWidget.style.setProperty('display', 'none', 'important');
+            if (bhashiniWidget.parentElement !== document.body) {
+              document.body.appendChild(bhashiniWidget);
+            }
+          }
+        }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    </script>
+  </body>
+</html>

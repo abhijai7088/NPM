@@ -1,0 +1,61 @@
+server:
+  port: 8081
+spring:
+  application:
+    name: npms-auth-service
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5433}/${DB_NAME:npms_db}
+    username: ${DB_USER:npms_user}
+    password: ${DB_PASSWORD:npms_local_pass_2026}
+  jpa:
+    hibernate.ddl-auto: validate
+    properties.hibernate.default_schema: auth
+    open-in-view: false
+  flyway:
+    enabled: false
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    from: ${MAIL_FROM:${MAIL_USERNAME:noreply@npms.nic.in}}
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_SMTP_AUTH:true}
+          starttls:
+            enable: ${MAIL_STARTTLS_ENABLE:true}
+            required: ${MAIL_STARTTLS_REQUIRED:true}
+          connectiontimeout: 10000
+          timeout: 10000
+          writetimeout: 10000
+
+jwt:
+  private-key-path: ${JWT_PRIVATE_KEY_PATH:classpath:keys/private.pem}
+  public-key-path: ${JWT_PUBLIC_KEY_PATH:classpath:keys/public.pem}
+  access-expiry-minutes: ${JWT_ACCESS_EXPIRY_MINUTES:15}
+  refresh-expiry-days: ${JWT_REFRESH_EXPIRY_DAYS:7}
+
+mfa:
+  issuer: NPMS
+  # AES-256 key (base64, 32 raw bytes) used to encrypt TOTP secrets at rest.
+  # Generate with: openssl rand -base64 32
+  secret-key: ${MFA_SECRET_ENC_KEY:}
+
+app:
+  env: ${APP_ENV:local}
+
+# Sliding-window request throttling for authentication endpoints (login,
+# forgot-password, verify-otp, resend-setup-otp) — see RateLimitFilter.
+# Backed by Redis so it holds across multiple auth-service instances.
+security:
+  rate-limit:
+    auth:
+      max-requests: ${AUTH_RATE_LIMIT_MAX:10}
+      window-seconds: ${AUTH_RATE_LIMIT_WINDOW_SECONDS:300}

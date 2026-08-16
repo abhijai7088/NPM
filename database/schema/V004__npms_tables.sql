@@ -1,0 +1,112 @@
+CREATE TABLE npms.projects (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_code VARCHAR(50) UNIQUE NOT NULL,
+    title VARCHAR(500) NOT NULL,
+    description TEXT,
+    category_id UUID REFERENCES master.project_categories(id),
+    ministry_id UUID REFERENCES master.ministries(id) NOT NULL,
+    department_id UUID REFERENCES master.departments(id) NOT NULL,
+    state_id UUID REFERENCES master.states(id),
+    district_id UUID REFERENCES master.districts(id),
+    status VARCHAR(30) NOT NULL DEFAULT 'DRAFT',
+    approved_budget NUMERIC(20,2),
+    spent_amount NUMERIC(20,2) DEFAULT 0,
+    start_date DATE,
+    expected_end_date DATE,
+    actual_end_date DATE,
+    created_by UUID REFERENCES auth.users(id) NOT NULL,
+    approved_by UUID REFERENCES auth.users(id),
+    approved_at TIMESTAMPTZ,
+    rejection_reason TEXT,
+    erp_project_id VARCHAR(50),
+    version INT DEFAULT 1,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE TABLE npms.project_documents (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID REFERENCES npms.projects(id) ON DELETE CASCADE,
+    file_name VARCHAR(500) NOT NULL,
+    file_path VARCHAR(1000) NOT NULL,
+    file_size_bytes BIGINT,
+    content_type VARCHAR(100),
+    uploaded_by UUID REFERENCES auth.users(id),
+    uploaded_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE TABLE npms.purchase_orders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    po_number VARCHAR(50) UNIQUE NOT NULL,
+    project_id UUID REFERENCES npms.projects(id) NOT NULL,
+    vendor_name VARCHAR(500) NOT NULL,
+    vendor_gstin VARCHAR(15),
+    po_amount NUMERIC(20,2) NOT NULL,
+    tax_amount NUMERIC(20,2) DEFAULT 0,
+    total_amount NUMERIC(20,2) NOT NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'DRAFT',
+    po_date DATE NOT NULL,
+    delivery_date DATE,
+    financial_code_id UUID REFERENCES master.financial_codes(id),
+    created_by UUID REFERENCES auth.users(id) NOT NULL,
+    approved_by UUID REFERENCES auth.users(id),
+    approved_at TIMESTAMPTZ,
+    version INT DEFAULT 1,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE TABLE npms.goods_receipts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    grn_number VARCHAR(50) UNIQUE NOT NULL,
+    po_id UUID REFERENCES npms.purchase_orders(id) NOT NULL,
+    received_date DATE NOT NULL,
+    received_by UUID REFERENCES auth.users(id) NOT NULL,
+    remarks TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE TABLE npms.invoices (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    invoice_number VARCHAR(50) UNIQUE NOT NULL,
+    po_id UUID REFERENCES npms.purchase_orders(id) NOT NULL,
+    grn_id UUID REFERENCES npms.goods_receipts(id),
+    vendor_invoice_number VARCHAR(100),
+    invoice_date DATE NOT NULL,
+    invoice_amount NUMERIC(20,2) NOT NULL,
+    tax_amount NUMERIC(20,2) DEFAULT 0,
+    tds_amount NUMERIC(20,2) DEFAULT 0,
+    net_payable NUMERIC(20,2) NOT NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'DRAFT',
+    created_by UUID REFERENCES auth.users(id) NOT NULL,
+    approved_by UUID REFERENCES auth.users(id),
+    approved_at TIMESTAMPTZ,
+    version INT DEFAULT 1,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE TABLE npms.payments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    payment_reference VARCHAR(100) UNIQUE NOT NULL,
+    invoice_id UUID REFERENCES npms.invoices(id) NOT NULL,
+    payment_date DATE NOT NULL,
+    payment_amount NUMERIC(20,2) NOT NULL,
+    payment_mode VARCHAR(50),
+    bank_reference VARCHAR(100),
+    status VARCHAR(30) NOT NULL DEFAULT 'INITIATED',
+    initiated_by UUID REFERENCES auth.users(id) NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE TABLE npms.tax_invoices (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tax_invoice_number VARCHAR(100) UNIQUE NOT NULL,
+    invoice_id UUID REFERENCES npms.invoices(id) NOT NULL,
+    gstin_buyer VARCHAR(15),
+    gstin_seller VARCHAR(15) NOT NULL,
+    taxable_amount NUMERIC(20,2) NOT NULL,
+    cgst_rate NUMERIC(5,2) DEFAULT 0,
+    sgst_rate NUMERIC(5,2) DEFAULT 0,
+    igst_rate NUMERIC(5,2) DEFAULT 0,
+    cgst_amount NUMERIC(20,2) DEFAULT 0,
+    sgst_amount NUMERIC(20,2) DEFAULT 0,
+    igst_amount NUMERIC(20,2) DEFAULT 0,
+    total_tax NUMERIC(20,2) NOT NULL,
+    total_amount NUMERIC(20,2) NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);

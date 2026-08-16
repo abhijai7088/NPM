@@ -1,0 +1,44 @@
+[
+  {
+    "username": "superadmin",
+    "password": "Abhi1234#",
+    "full_name": "Pranu Kumar",
+    "email": "sixer3080@gmail.com",
+    "role": "SUPER_ADMIN",
+    "prj_mgr_id": null,
+    "designation": "NIC System Administrator",
+    "zone": null,
+    "created_by": "SYSTEM",
+    "is_active": true,
+    "created_at": "2026-07-15T10:41:31.070678",
+    "managed_by": null
+  },
+  {
+    "username": "md.alok_tiwari",
+    "password": "Abhi1234#",
+    "full_name": "Alok Tiwari",
+    "email": "amanchoor0@gmail.com",
+    "role": "MD",
+    "prj_mgr_id": null,
+    "designation": "Managing Director, NICSI",
+    "zone": null,
+    "created_by": "superadmin",
+    "is_active": true,
+    "created_at": "2026-07-15T10:47:34.766942",
+    "managed_by": null
+  },
+  {
+    "username": "pm_atul_rastogi",
+    "password": "Abhi1234#",
+    "full_name": "Atul Rastogi",
+    "email": "satyamjai7088@gmail.com",
+    "role": "PM",
+    "prj_mgr_id": 1626,
+    "designation": "Project Manager, NICSI",
+    "zone": "North Zone",
+    "created_by": "superadmin",
+    "is_active": true,
+    "created_at": "2026-07-15T11:07:07.063257",
+    "managed_by": "md.alok_tiwari"
+  }
+]

@@ -1,0 +1,21 @@
+server:
+  port: 8082
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:npms_db}
+    username: ${DB_USER:npms_user}
+    password: ${DB_PASSWORD:npms_local_pass_2026}
+  jpa:
+    hibernate.ddl-auto: validate
+    properties.hibernate.default_schema: master
+  flyway:
+    enabled: false
+  cache:
+    type: redis
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      time-to-live: 900000
+jwt:
+  public-key-path: ${JWT_PUBLIC_KEY_PATH:classpath:keys/public.pem}

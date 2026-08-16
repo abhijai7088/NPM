@@ -1,0 +1,1 @@
+server:\n  port: 8086\nspring:\n  datasource:\n    url: jdbc:postgresql://localhost:5432/npms_db\n

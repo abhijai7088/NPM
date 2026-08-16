@@ -1,0 +1,228 @@
+/* ── Reports & Executive Controls Module Styling ── */
+.reports-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* Report Selection Grid */
+.report-type-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+}
+
+.report-type-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  color: #334155;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+}
+
+.report-type-btn:hover {
+  border-color: #006699;
+  color: #003366;
+  background: #f0f7ff;
+  transform: translateY(-1px);
+}
+
+.report-type-btn--active {
+  background: linear-gradient(135deg, #003366 0%, #004b96 100%) !important;
+  color: white !important;
+  border-color: #003366 !important;
+  box-shadow: 0 4px 12px rgba(0, 51, 102, 0.25) !important;
+}
+
+.report-type-btn__icon {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+.report-type-btn__text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.report-type-btn__title {
+  font-weight: 700;
+}
+
+.report-type-btn__sub {
+  font-size: 0.7rem;
+  opacity: 0.8;
+  margin-top: 2px;
+}
+
+/* Print official elements - hidden on screen */
+.print-official-header,
+.print-footer-signatures {
+  display: none;
+}
+
+/* UC Modal Styling */
+.uc-modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.uc-modal-container {
+  background: #ffffff;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 850px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+
+.uc-modal-header {
+  padding: 1.25rem 1.5rem;
+  background: #003366;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.uc-modal-body {
+  padding: 1.5rem;
+  overflow-y: auto;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.82rem;
+  background: #f8fafc;
+  color: #0f172a;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.uc-modal-footer {
+  padding: 1rem 1.5rem;
+  background: #ffffff;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+/* ── Print Media Styles for Professional PDF & Printing ── */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+
+  /* Hide UI chrome */
+  body * {
+    visibility: hidden;
+  }
+
+  #printable-report-area,
+  #printable-report-area * {
+    visibility: visible;
+  }
+
+  #printable-report-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    background: white !important;
+    color: black !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .no-print,
+  .btn,
+  button,
+  input,
+  select,
+  .sidebar,
+  .app-header {
+    display: none !important;
+  }
+
+  .print-official-header {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 2px solid #003366;
+    padding-bottom: 10px;
+    margin-bottom: 16px;
+  }
+
+  .print-official-header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .print-official-header-left img {
+    height: 48px;
+    width: auto;
+  }
+
+  .print-official-title {
+    font-size: 13pt;
+    font-weight: 800;
+    color: #003366;
+  }
+
+  .print-official-sub {
+    font-size: 8.5pt;
+    color: #475569;
+  }
+
+  .print-official-meta {
+    text-align: right;
+    font-size: 8.5pt;
+    color: #334155;
+  }
+
+  .data-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    font-size: 8.5pt !important;
+  }
+
+  .data-table th, .data-table td {
+    border: 1px solid #94a3b8 !important;
+    padding: 5px 8px !important;
+  }
+
+  .data-table th {
+    background-color: #e2e8f0 !important;
+    color: #003366 !important;
+    font-weight: 700 !important;
+  }
+
+  .print-footer-signatures {
+    display: flex !important;
+    justify-content: space-between;
+    margin-top: 40px;
+    padding-top: 15px;
+    border-top: 1px solid #cbd5e1;
+    font-size: 8.5pt;
+    page-break-inside: avoid;
+  }
+}

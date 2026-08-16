@@ -1,0 +1,29 @@
+# Secrets — real credentials and keys live only on disk / in a secret
+# manager, never in version control. There is no git repository in this
+# workspace yet, but these rules must exist BEFORE the first `git init` /
+# `git add`, since anything committed once is in history forever even after
+# a later delete.
+.env
+.env.*
+!.env.example
+
+# RSA keys used to sign/verify JWTs (npms-auth-service)
+**/keys/*.pem
+**/keys/private.pem
+**/keys/public.pem
+
+# Build output
+**/target/
+**/dist/
+**/dist-ssr/
+**/node_modules/
+
+# Logs
+*.log
+**/*.log
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store

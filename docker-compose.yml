@@ -1,0 +1,114 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: npms_postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports: ["5433:5432"]
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Schema files (V001-V008) run first, then the seed (V009) — sorted alphabetically by Postgres
+      - ./database/schema:/docker-entrypoint-initdb.d
+      - ./database/seed/V009__seed_master_data.sql:/docker-entrypoint-initdb.d/V009__seed_master_data.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 10s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: npms_redis
+    ports: ["6379:6379"]
+    volumes: [redis_data:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+    volumes: [zookeeper_data:/var/lib/zookeeper]
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: npms_kafka
+    depends_on: [zookeeper]
+    ports: ["9092:9092"]
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    volumes: [kafka_data:/var/lib/kafka]
+
+  kafdrop:
+    image: obsidiandynamics/kafdrop:4.0.1
+    container_name: npms_kafdrop
+    ports: ["9000:9000"]
+    environment:
+      KAFKA_BROKERCONNECT: kafka:9092
+    depends_on: [kafka]
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: npms_mailhog
+    ports: ["1025:1025", "8025:8025"]
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: npms_ollama
+    ports: ["11434:11434"]
+    volumes: [ollama_data:/root/.ollama]
+
+  pgadmin:
+    image: dpage/pgadmin4:8.6
+    container_name: npms_pgadmin
+    ports: ["5050:80"]
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@npms.gov.in
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    volumes: [pgadmin_data:/var/lib/pgadmin]
+
+  auth-service:
+    build:
+      context: ./backend/npms-auth-service
+    image: npms-auth-service:local
+    container_name: npms_auth_service
+    ports: ["8081:8081"]
+    # Mail settings are read directly from the .env FILE (never from the
+    # calling shell). This is deliberate: set-env.ps1 exports MAIL_HOST=
+    # localhost / MAIL_PORT=1025 for local Mailhog use by core-service, and
+    # if those ever leaked into `environment:` substitution below (which
+    # docker compose resolves from the shell FIRST, then .env), the auth
+    # container would silently try to reach a mail server that doesn't
+    # exist on the Docker network. env_file reads the file's raw contents,
+    # so it can never be shadowed by an exported shell variable.
+    env_file:
+      - .env
+    environment:
+      # Connect to other containers over the Docker network (service names, internal ports).
+      # These intentionally override the host-oriented values in .env.
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      KAFKA_BOOTSTRAP: kafka:9092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+volumes:
+  postgres_data:
+  redis_data:
+  zookeeper_data:
+  kafka_data:
+  ollama_data:
+  pgadmin_data:

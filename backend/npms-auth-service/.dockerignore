@@ -1,0 +1,9 @@
+src
+*.md
+# Keep only the built jar from target
+target/classes
+target/generated-sources
+target/maven-archiver
+target/maven-status
+target/test-classes
+target/surefire-reports
