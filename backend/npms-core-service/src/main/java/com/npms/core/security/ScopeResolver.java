@@ -81,8 +81,22 @@ public class ScopeResolver {
                 yield new AccessScope(username, role, ids);
             }
 
+            // PMC: Project Monitoring Cell — org-wide unrestricted read access.
+            // PMC cannot write to project financial data but can read all projects
+            // and manage tickets/lifecycle across the organisation.
+            case "PMC" ->
+                    new AccessScope(username, role, null);
+
+            // OA: Operational Assistant — username-scoped to their own assigned work.
+            // The OA scope is expressed as null (unrestricted IDs list) because the
+            // OA does not have a prjMgrId; their access is scoped per-request by
+            // TicketController checking assigned_to == username.
+            case "OA" ->
+                    new AccessScope(username, role, null);
+
             default -> throw new NpmsBaseException("FORBIDDEN", "Your account role is not recognised by this service.");
         };
+
     }
 
     private String resolveRole(Authentication authentication) {
@@ -96,7 +110,15 @@ public class ScopeResolver {
         }
         for (GrantedAuthority authority : authentication.getAuthorities()) {
             String value = authority.getAuthority();
+            if ("ROLE_PMC".equals(value)) return "PMC";
+        }
+        for (GrantedAuthority authority : authentication.getAuthorities()) {
+            String value = authority.getAuthority();
             if ("ROLE_PM".equals(value)) return "PM";
+        }
+        for (GrantedAuthority authority : authentication.getAuthorities()) {
+            String value = authority.getAuthority();
+            if ("ROLE_OA".equals(value)) return "OA";
         }
         return "PM";
     }

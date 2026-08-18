@@ -31,7 +31,7 @@ import java.util.stream.Collectors;
 @CrossOrigin(origins = { "http://localhost:5195", "http://localhost:5190", "http://localhost:5173", "http://localhost:5174", "http://localhost:3000" })
 public class UserAdminController {
 
-    private static final Set<String> PROVISIONABLE_ROLES = Set.of("MD", "PM");
+    private static final Set<String> PROVISIONABLE_ROLES = Set.of("MD", "PM", "PMC", "OA");
 
     private static final String ACCOUNT_DIRECTORY_SQL = """
             WITH ranked_accounts AS (
@@ -49,14 +49,14 @@ public class UserAdminController {
                        ROW_NUMBER() OVER (
                            PARTITION BY u.username
                            ORDER BY CASE r.code
-                               WHEN 'SUPER_ADMIN' THEN 1 WHEN 'MD' THEN 2 WHEN 'PM' THEN 3 ELSE 4
+                               WHEN 'SUPER_ADMIN' THEN 1 WHEN 'MD' THEN 2 WHEN 'PMC' THEN 3 WHEN 'PM' THEN 4 WHEN 'OA' THEN 5 ELSE 6
                            END
                        ) AS role_rank
                 FROM auth.users u
                 JOIN auth.user_roles ur ON ur.user_id = u.id
                 JOIN auth.roles r ON r.id = ur.role_id
                 LEFT JOIN public.app_user au ON au.username = u.username
-                WHERE r.code IN ('SUPER_ADMIN', 'MD', 'PM')
+                WHERE r.code IN ('SUPER_ADMIN', 'MD', 'PM', 'PMC', 'OA')
                   AND COALESCE(u.is_deleted, FALSE) = FALSE
             )
             SELECT username, full_name, email, role, is_active, prj_mgr_id, zone,
@@ -65,6 +65,7 @@ public class UserAdminController {
             WHERE role_rank = 1
             ORDER BY created_at ASC NULLS LAST, username ASC
             """;
+
 
     private final AppUserRepository userRepo;
     private final ProjectManagerRepository pmRepo;
@@ -154,11 +155,11 @@ public class UserAdminController {
         }
         if ("SUPER_ADMIN".equals(actingRole)) {
             if (!PROVISIONABLE_ROLES.contains(role)) {
-                return bad("Super Admin may only create Managing Director or Project Manager accounts.");
+                return bad("Super Admin may only create Managing Director, Project Manager, PMC, or OA accounts.");
             }
         } else if ("MD".equals(actingRole)) {
-            if (!"PM".equals(role)) {
-                return bad("Managing Director may only create Project Manager accounts.");
+            if (!"PM".equals(role) && !"OA".equals(role)) {
+                return bad("Managing Director may only create Project Manager or Operational Assistant accounts.");
             }
         } else {
             return forbidden("You are not authorised to provision users.");
@@ -200,7 +201,7 @@ public class UserAdminController {
         }
 
         Long prjMgrId = null;
-        String zone = null;
+        String zone = str(body.get("zone")).trim();
         String managedBy = null;
         if ("PM".equals(role)) {
             try {
@@ -235,7 +236,20 @@ public class UserAdminController {
             if (designation.isEmpty()) {
                 designation = pm.getDesignation();
             }
+        } else if ("OA".equals(role)) {
+            if ("MD".equals(actingRole)) {
+                managedBy = actingUser;
+            } else {
+                managedBy = normalizeUsername(str(body.get("managedBy")));
+                if (managedBy.isEmpty()) managedBy = null;
+            }
+            if (designation.isEmpty()) designation = "Operational Assistant";
+            if (zone.isEmpty()) zone = "HQ";
+        } else if ("PMC".equals(role)) {
+            if (designation.isEmpty()) designation = "Project Monitoring Cell";
+            if (zone.isEmpty()) zone = "HQ";
         }
+
 
         UUID roleId = jdbcTemplate.queryForList(
                         "SELECT id FROM auth.roles WHERE code = ?", UUID.class, role)

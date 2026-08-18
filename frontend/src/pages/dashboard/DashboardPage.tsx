@@ -157,10 +157,10 @@ export const DashboardPage: React.FC = () => {
       .catch(err => console.error("Error fetching dashboard data", err));
 
     if (isMD || isSuperAdmin) {
-      axios.get(`/api/v1/users?actingRole=${user?.role || ''}&actingUser=${user?.username || ''}`)
+      axios.get('/api/v1/project-managers')
         .then(res => {
           if (res.data.success) {
-            setPmList(res.data.data.filter((u: any) => u.role === 'PM'));
+            setPmList(res.data.data);
           }
         })
         .catch(err => console.error("Error fetching PMs", err));

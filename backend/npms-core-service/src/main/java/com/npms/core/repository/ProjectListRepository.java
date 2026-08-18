@@ -18,7 +18,7 @@ public interface ProjectListRepository extends JpaRepository<ProjectList, Long>,
      */
     @Query(value = """
             SELECT p.prj_mgr_id AS prjMgrId,
-                   COUNT(*) AS projectCount,
+                   COUNT(DISTINCT p.header_id) AS projectCount,
                    COALESCE(SUM(p.amount_received), 0) AS totalReceived,
                    COALESCE(SUM(p.nicsi_commission), 0) AS totalCommission,
                    COALESCE(SUM(p.po_amount), 0) AS totalPo,
@@ -29,4 +29,6 @@ public interface ProjectListRepository extends JpaRepository<ProjectList, Long>,
             GROUP BY p.prj_mgr_id
             """, nativeQuery = true)
     List<Object[]> aggregatePortfolioByManager();
+
+
 }

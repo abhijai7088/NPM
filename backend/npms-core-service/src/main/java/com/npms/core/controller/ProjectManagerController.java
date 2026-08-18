@@ -88,10 +88,16 @@ public class ProjectManagerController {
 
         // Build a lookup of portfolio aggregates keyed by prj_mgr_id
         Map<Long, Object[]> aggByMgr = new HashMap<>();
+        Object[] unassignedAgg = null;
+
         for (Object[] row : projectRepo.aggregatePortfolioByManager()) {
-            if (row != null && row.length > 0 && row[0] != null) {
-                Long mgrId = ((Number) row[0]).longValue();
-                aggByMgr.put(mgrId, row);
+            if (row != null && row.length > 0) {
+                if (row[0] != null) {
+                    Long mgrId = ((Number) row[0]).longValue();
+                    aggByMgr.put(mgrId, row);
+                } else {
+                    unassignedAgg = row;
+                }
             }
         }
 
@@ -142,6 +148,34 @@ public class ProjectManagerController {
             data.add(row);
         }
 
+        Map<String, Object> unassignedPoolMap = null;
+        if (unassignedAgg != null) {
+            long projectCount = ((Number) unassignedAgg[1]).longValue();
+            if (projectCount > 0) {
+                BigDecimal totalReceived = toBig(unassignedAgg[2]);
+                BigDecimal totalCommission = toBig(unassignedAgg[3]);
+                BigDecimal totalPo = toBig(unassignedAgg[4]);
+                BigDecimal totalPaid = toBig(unassignedAgg[5]);
+                BigDecimal totalAbp = toBig(unassignedAgg[6]);
+                BigDecimal totalVendorPending = toBig(unassignedAgg[7]);
+
+                orgReceived = orgReceived.add(totalReceived);
+                orgCommission = orgCommission.add(totalCommission);
+                orgPo = orgPo.add(totalPo);
+                orgPending = orgPending.add(totalVendorPending);
+                orgProjects += projectCount;
+
+                unassignedPoolMap = new LinkedHashMap<>();
+                unassignedPoolMap.put("projectCount", projectCount);
+                unassignedPoolMap.put("totalReceived", totalReceived);
+                unassignedPoolMap.put("totalCommission", totalCommission);
+                unassignedPoolMap.put("totalPo", totalPo);
+                unassignedPoolMap.put("totalPaid", totalPaid);
+                unassignedPoolMap.put("totalAbp", totalAbp);
+                unassignedPoolMap.put("totalVendorPending", totalVendorPending);
+            }
+        }
+
         // Sort by project count and totalReceived descending
         data.sort((a, b) -> {
             int cmp = Long.compare(((Number) b.get("projectCount")).longValue(), ((Number) a.get("projectCount")).longValue());
@@ -157,13 +191,18 @@ public class ProjectManagerController {
         org.put("totalPo", orgPo);
         org.put("totalVendorPending", orgPending);
 
-        return ResponseEntity.ok(Map.of(
-                "success", true,
-                "data", data,
-                "org", org,
-                "total", managers.size()
-        ));
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("success", true);
+        resp.put("data", data);
+        resp.put("org", org);
+        resp.put("total", managers.size());
+        if (unassignedPoolMap != null) {
+            resp.put("unassignedPool", unassignedPoolMap);
+        }
+
+        return ResponseEntity.ok(resp);
     }
+
 
     @GetMapping("/{prjMgrId}")
     public ResponseEntity<Map<String, Object>> getProjectManager(
@@ -179,6 +218,44 @@ public class ProjectManagerController {
         return ResponseEntity.ok(Map.of("success", true, "data", pm));
     }
 
+    /**
+     * GET /api/v1/project-managers/{prjMgrId}/projects
+     *
+     * Returns a compact list of projects for a given PM — used by the MD's
+     * Ticket create form to populate the project ID dropdown dynamically.
+     * Accessible by MD, PMC, and Super Admin (not PM or OA).
+     */
+    @GetMapping("/{prjMgrId}/projects")
+    public ResponseEntity<Map<String, Object>> getProjectsForPm(
+            Authentication authentication,
+            @PathVariable Long prjMgrId) {
+
+        AccessScope scope = scopeResolver.resolve(authentication);
+        if (scope.isPm() || scope.isOa()) {
+            throw ForbiddenScopeException.forResource("other Project Managers' project lists");
+        }
+
+        List<Map<String, Object>> projects = jdbcTemplate.queryForList(
+            """
+            SELECT header_id  AS "headerId",
+                   project_cd AS "projectCode",
+                   prj_nm     AS "projectName",
+                   customer_name AS "customerName"
+            FROM public.xx_nic_pm_prj_list
+            WHERE prj_mgr_id = ?
+            ORDER BY project_cd ASC
+            """,
+            prjMgrId
+        );
+
+        return ResponseEntity.ok(Map.of(
+            "success", true,
+            "prjMgrId", prjMgrId,
+            "count", projects.size(),
+            "data", projects
+        ));
+    }
+
     private static BigDecimal toBig(Object o) {
         if (o == null) return BigDecimal.ZERO;
         if (o instanceof BigDecimal b) return b;
@@ -186,3 +263,4 @@ public class ProjectManagerController {
         return BigDecimal.ZERO;
     }
 }
+

@@ -5,7 +5,9 @@ import axios from 'axios';
 import { formatCurrency } from '../../utils/formatters';
 import { useAuthStore } from '../../store/authStore';
 import { ProjectListPage } from '../projects/ProjectListPage';
+import { setDelegatedPmContext, clearDelegatedPmContext } from '../../api/delegatedContext';
 import './ProjectManagersPage.css';
+
 
 const USERS_API = '/api/v1/users';
 
@@ -34,6 +36,7 @@ export const ProjectManagersPage: React.FC = () => {
   const canProvision = user?.role === 'MD' || user?.role === 'SUPER_ADMIN';
 
   const [managers, setManagers] = useState<PM[]>([]);
+  const [unassignedPool, setUnassignedPool] = useState<any>(null);
   const [org, setOrg] = useState<any>({});
   const [loading, setLoading] = useState(true);
 
@@ -63,11 +66,13 @@ export const ProjectManagersPage: React.FC = () => {
         if (res.data.success) {
           setManagers(res.data.data);
           setOrg(res.data.org || {});
+          setUnassignedPool(res.data.unassignedPool || null);
         }
       })
       .catch(err => console.error('Error fetching project managers', err))
       .finally(() => setLoading(false));
   };
+
 
   const loadProvisioning = () => {
     axios.get(`${USERS_API}/pm-profiles`).then(r => { if (r.data.success) setProfiles(r.data.data); }).catch(() => {});
@@ -204,11 +209,15 @@ export const ProjectManagersPage: React.FC = () => {
         <ProjectListPage
           forcedPrjMgrId={selectedPm.prjMgrId}
           pmInfo={selectedPm}
-          onBackToRoster={() => setSelectedPm(null)}
+          onBackToRoster={() => {
+            clearDelegatedPmContext();
+            setSelectedPm(null);
+          }}
         />
       </div>
     );
   }
+
 
   // ── MAIN MD PROJECT MANAGERS DIRECTORY VIEW ──
   return (
@@ -392,7 +401,50 @@ export const ProjectManagersPage: React.FC = () => {
         </div>
       )}
 
+      {/* Dedicated Corporate Unassigned Projects Pool Banner */}
+      {unassignedPool && unassignedPool.projectCount > 0 && (
+        <div className="card" style={{
+          background: 'linear-gradient(135deg, #f0f7ff, #e6f0fa)',
+          border: '1.5px solid #b3d1ff',
+          borderRadius: '10px',
+          padding: '0.85rem 1.25rem',
+          marginBottom: '1rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '0.75rem',
+          boxShadow: '0 3px 12px rgba(0, 51, 102, 0.06)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+            <div style={{
+              width: '38px', height: '38px', borderRadius: '8px',
+              background: '#003366', color: '#ffffff', display: 'flex',
+              alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem'
+            }}>
+              🏢
+            </div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#003366' }}>
+                Corporate Unassigned Projects Pool ({unassignedPool.projectCount} Projects)
+              </div>
+              <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: '1px' }}>
+                Central corporate pool projects not yet assigned to a specific Project Manager &middot; Total Receipts: <strong>{formatCurrency(unassignedPool.totalReceived)}</strong> &middot; Total PO: <strong>{formatCurrency(unassignedPool.totalPo)}</strong>
+              </div>
+            </div>
+          </div>
+          <button
+            className="btn btn-navy btn-sm"
+            onClick={() => navigate('/projects?unassigned=true')}
+            style={{ fontSize: '0.78rem', padding: '0.4rem 0.85rem', whiteSpace: 'nowrap' }}
+          >
+            Inspect Unassigned Pool ({unassignedPool.projectCount} Projects) →
+          </button>
+        </div>
+      )}
+
       {/* Modern Compact PM Cards Grid */}
+
       <div className="pm-cards-grid-compact">
         {filteredManagers.map(pm => {
           return (
@@ -464,6 +516,7 @@ export const ProjectManagersPage: React.FC = () => {
                   className="btn btn-primary btn-xs pm-card-compact__btn"
                   onClick={(e) => {
                     e.stopPropagation();
+                    setDelegatedPmContext(pm.prjMgrId);
                     setSelectedPm(pm);
                   }}
                 >
@@ -473,6 +526,7 @@ export const ProjectManagersPage: React.FC = () => {
             </div>
           );
         })}
+
       </div>
 
       {filteredManagers.length === 0 && (
@@ -506,8 +560,12 @@ export const ProjectManagersPage: React.FC = () => {
             </thead>
             <tbody>
               {filteredManagers.map(pm => (
-                <tr key={pm.prjMgrId} className="table-row-hover" style={{ cursor: 'pointer' }} onClick={() => setSelectedPm(pm)}>
+                <tr key={pm.prjMgrId} className="table-row-hover" style={{ cursor: 'pointer' }} onClick={() => {
+                  setDelegatedPmContext(pm.prjMgrId);
+                  setSelectedPm(pm);
+                }}>
                   <td><code>#{pm.prjMgrId}</code></td>
+
                   <td style={{ fontWeight: 600 }}>{pm.fullName}</td>
                   <td><span className="pm-zone-pill" style={{ background: `${zoneColor(pm.zone)}18`, color: zoneColor(pm.zone) }}>{pm.zone}</span></td>
                   <td>

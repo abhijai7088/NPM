@@ -5,15 +5,22 @@ import { ProtectedRoute } from './components/layout/ProtectedRoute';
 import { LoginPage } from './pages/auth/LoginPage';
 import { MfaPage } from './pages/auth/MfaPage';
 
+// Axios interceptor: appends X-Acting-As-Pm header for MD delegated context
+import './api/delegatedContext';
+
 // Lazy-loaded pages for code splitting
 const DashboardPage    = lazy(() => import('./pages/dashboard/DashboardPage').then(m => ({ default: m.DashboardPage })));
 const ProjectListPage  = lazy(() => import('./pages/projects/ProjectListPage').then(m => ({ default: m.ProjectListPage })));
+const Project360Page   = lazy(() => import('./pages/projects/Project360Page').then(m => ({ default: m.Project360Page })));
 const FinancePage      = lazy(() => import('./pages/finance/FinancePage').then(m => ({ default: m.FinancePage })));
 const ReportsPage      = lazy(() => import('./pages/reports/ReportsPage').then(m => ({ default: m.ReportsPage })));
 const NoticesPage      = lazy(() => import('./pages/notifications/NotificationsPage').then(m => ({ default: m.NotificationsPage })));
 const ProjectManagersPage = lazy(() => import('./pages/team/ProjectManagersPage').then(m => ({ default: m.ProjectManagersPage })));
 const UserManagementPage  = lazy(() => import('./pages/admin/UserManagementPage').then(m => ({ default: m.UserManagementPage })));
 const AuditLogPage        = lazy(() => import('./pages/admin/AuditLogPage').then(m => ({ default: m.AuditLogPage })));
+const PmcTowerPage        = lazy(() => import('./pages/pmc/PmcTowerPage').then(m => ({ default: m.PmcTowerPage })));
+const TicketListPage      = lazy(() => import('./pages/tickets/TicketListPage').then(m => ({ default: m.TicketListPage })));
+const OaTaskDashboard     = lazy(() => import('./pages/oa/OaTaskDashboard').then(m => ({ default: m.OaTaskDashboard })));
 
 // Loading spinner
 const PageLoader = () => (
@@ -52,7 +59,7 @@ function App() {
         {/* ────────────────────────────────────────────────────────────────
          *  ALL authenticated roles: Dashboard
          * ──────────────────────────────────────────────────────────────── */}
-        <Route element={<ProtectedRoute allowedRoles={['SUPER_ADMIN', 'MD', 'PM']} />}>
+        <Route element={<ProtectedRoute allowedRoles={['SUPER_ADMIN', 'MD', 'PM', 'PMC', 'OA']} />}>
           <Route element={<AppShell />}>
             <Route
               path="/dashboard"
@@ -116,6 +123,71 @@ function App() {
             {/* Legacy redirect: old /notifications path → /notices */}
             <Route path="/notifications" element={<Navigate to="/notices" replace />} />
 
+          </Route>
+        </Route>
+
+        {/* ────────────────────────────────────────────────────────────────
+         *  Project 360° — MD + PM + PMC: full project lifecycle view
+         *  Route: /projects/:headerId
+         * ──────────────────────────────────────────────────────────────── */}
+        <Route element={<ProtectedRoute allowedRoles={['MD', 'PM', 'PMC', 'SUPER_ADMIN']} />}>
+          <Route element={<AppShell />}>
+            <Route
+              path="/projects/:headerId"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <Project360Page />
+                </Suspense>
+              }
+            />
+          </Route>
+        </Route>
+
+        {/* ────────────────────────────────────────────────────────────────
+         *  Tickets — MD + PM + PMC + OA
+         * ──────────────────────────────────────────────────────────────── */}
+        <Route element={<ProtectedRoute allowedRoles={['MD', 'PM', 'PMC', 'SUPER_ADMIN']} />}>
+          <Route element={<AppShell />}>
+            <Route
+              path="/tickets"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <TicketListPage />
+                </Suspense>
+              }
+            />
+          </Route>
+        </Route>
+
+        {/* ────────────────────────────────────────────────────────────────
+         *  PMC Control Tower — PMC + MD + SUPER_ADMIN
+         * ──────────────────────────────────────────────────────────────── */}
+        <Route element={<ProtectedRoute allowedRoles={['PMC', 'MD', 'SUPER_ADMIN']} />}>
+          <Route element={<AppShell />}>
+            <Route
+              path="/pmc"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <PmcTowerPage />
+                </Suspense>
+              }
+            />
+          </Route>
+        </Route>
+
+        {/* ────────────────────────────────────────────────────────────────
+         *  OA Task Dashboard — OA + PM + MD + SUPER_ADMIN
+         * ──────────────────────────────────────────────────────────────── */}
+        <Route element={<ProtectedRoute allowedRoles={['OA', 'PM', 'MD', 'SUPER_ADMIN']} />}>
+          <Route element={<AppShell />}>
+            <Route
+              path="/my-tasks"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <OaTaskDashboard />
+                </Suspense>
+              }
+            />
           </Route>
         </Route>
 

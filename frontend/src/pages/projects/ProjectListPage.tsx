@@ -2,7 +2,8 @@
 
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+
 import axios from 'axios';
 import { formatCurrency, formatCurrencyFull, STATE_MAP, computeGst } from '../../utils/formatters';
 import { AdvancedFilters } from '../../components/dashboard/AdvancedFilters';
@@ -99,8 +100,10 @@ interface ProjectListPageProps {
 
 export const ProjectListPage: React.FC<ProjectListPageProps> = ({ forcedPrjMgrId, onBackToRoster, pmInfo }) => {
   const { user } = useAuthStore();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedIdFromUrl = searchParams.get('id');
+
 
   // RBAC scope: PMs are locked to their own prjMgrId. MD/SuperAdmin may
   // optionally drill into a specific PM via forcedPrjMgrId prop or ?prjMgrId= query param.
@@ -795,6 +798,15 @@ NICSI Project Monitoring System
           </div>
 
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+            <button
+              className="btn btn-sm"
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, background: 'linear-gradient(135deg, #003366, #1a6bb5)', color: '#fff', border: 'none', borderRadius: '8px', padding: '0.45rem 0.9rem', cursor: 'pointer' }}
+              onClick={() => navigate(`/projects/${selected.headerId}`)}
+              title="Open full Project 360° view with lifecycle, tickets, and audit trail"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+              360° View
+            </button>
             <button className="btn btn-outline btn-sm" onClick={downloadProjectDetails} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, borderColor: '#006699', color: '#006699' }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Download Full Detailed Report

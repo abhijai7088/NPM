@@ -42,6 +42,8 @@ export const UserManagementPage = () => {
     if (roleCode === 'SUPER_ADMIN') badgeClass = 'badge-danger';
     if (roleCode === 'MD') badgeClass = 'badge-success';
     if (roleCode === 'PM') badgeClass = 'badge-info';
+    if (roleCode === 'PMC') badgeClass = 'badge-warning';
+    if (roleCode === 'OA') badgeClass = 'badge-secondary';
     
     return (
       <span className={`badge ${badgeClass}`}>
@@ -50,6 +52,7 @@ export const UserManagementPage = () => {
       </span>
     );
   };
+
 
   return (
     <div className="page-container animate-fade-in-up">

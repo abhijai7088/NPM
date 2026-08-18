@@ -13,6 +13,15 @@ import java.util.Objects;
  * truth. Controllers use this to build repository/specification queries
  * and to validate any resource-specific id the caller asks for.
  *
+ * <h2>Roles</h2>
+ * <ul>
+ *   <li>{@code SUPER_ADMIN} — unrestricted</li>
+ *   <li>{@code MD}          — all PMs under their management</li>
+ *   <li>{@code PM}          — their own prjMgrId only</li>
+ *   <li>{@code PMC}         — org-wide read + ticket/lifecycle monitoring</li>
+ *   <li>{@code OA}          — restricted to tickets assigned to them</li>
+ * </ul>
+ *
  * <h2>How this scales beyond one PM</h2>
  * <ul>
  *   <li>{@code SUPER_ADMIN} — {@link #allowedPrjMgrIds()} is {@code null},
@@ -62,6 +71,16 @@ public final class AccessScope {
 
     public boolean isPm() {
         return "PM".equals(role);
+    }
+
+    /** True if the caller is a Project Monitoring Cell member. PMC has org-wide read access. */
+    public boolean isPmc() {
+        return "PMC".equals(role);
+    }
+
+    /** True if the caller is an Operational Assistant. OA is scoped to their own assigned tickets. */
+    public boolean isOa() {
+        return "OA".equals(role);
     }
 
     /**

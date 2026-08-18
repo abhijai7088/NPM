@@ -4,7 +4,8 @@ export interface LoginRequest {
 }
 
 /** RBAC roles for NPMS. */
-export type Role = 'SUPER_ADMIN' | 'MD' | 'PM';
+export type Role = 'SUPER_ADMIN' | 'MD' | 'PM' | 'PMC' | 'OA';
+
 
 export interface UserProfile {
   userId: string;

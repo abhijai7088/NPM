@@ -788,4 +788,69 @@ public class ProjectListController {
             return ResponseEntity.status(500).body(Map.of("success", false, "message", "Failed to dispatch email: " + e.getMessage()));
         }
     }
+
+    /**
+     * GET /api/v1/projects/{headerId}
+     *
+     * Returns a single project record for the Project 360° page.
+     * Enforces the same RBAC scope as the list endpoint: a PM can only
+     * fetch their own projects; MD sees all of their managed PMs' projects.
+     */
+    @GetMapping("/{headerId}")
+    public ResponseEntity<Map<String, Object>> getProject(
+            Authentication authentication,
+            @PathVariable Long headerId) {
+
+        AccessScope scope = scopeResolver.resolve(authentication);
+
+        com.npms.core.entity.ProjectList project = repo.findById(headerId)
+                .orElse(null);
+
+        if (project == null) {
+            return ResponseEntity.status(404).body(Map.of(
+                    "success", false, "message", "Project not found."));
+        }
+
+        // Enforce RBAC: PM and MD can only see projects in their allowed scope
+        if (!scope.isUnrestricted() && !scope.isPmc()) {
+            List<Long> allowed = scope.allowedPrjMgrIds();
+            if (allowed != null && !allowed.contains(project.getPrjMgrId())) {
+                return ResponseEntity.status(403).body(Map.of(
+                        "success", false, "message", "Access denied to this project."));
+            }
+        }
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("headerId", project.getHeaderId());
+        data.put("projectId", project.getProjectId());
+        data.put("projectCode", project.getProjectCode());
+        data.put("projectName", project.getProjectName());
+        data.put("customerName", project.getCustomerName());
+        data.put("prjMgrId", project.getPrjMgrId());
+        data.put("prjType", project.getPrjType());
+        data.put("projectCategory", project.getProjectCategory());
+        data.put("amountReceived", project.getAmountReceived());
+        data.put("poAmount", project.getPoAmount());
+        data.put("totalAmountPaid", project.getTotalAmountPaid());
+        data.put("totalInvoiceAmount", project.getTotalInvoiceAmount());
+        data.put("totalTaxInvoiceAmount", project.getTotalTaxInvoiceAmount());
+        data.put("prjBudgetNo", project.getPrjBudgetNo());
+        data.put("noOfPo", project.getNoOfPo());
+        data.put("noOfExpInvoice", project.getNoOfExpInvoice());
+        data.put("noOfTaxInvoice", project.getNoOfTaxInvoice());
+        data.put("nicsiCommission", project.getNicsiCommission());
+        data.put("totalPenaltyAmt", project.getTotalPenaltyAmt());
+        data.put("createdOn", project.getCreatedOn());
+        data.put("userEmail", project.getUserEmail());
+        data.put("mobileNumber", project.getMobileNumber());
+        data.put("hodEmail", project.getHodEmail());
+        data.put("nicCoordEmail", project.getNicCoordEmail());
+        data.put("staffEmailId", project.getStaffEmailId());
+        data.put("ministry", project.getMinistry());
+        data.put("department", project.getDepartment());
+        data.put("stateCode", project.getStateCode());
+
+        return ResponseEntity.ok(Map.of("success", true, "data", data));
+    }
 }
+

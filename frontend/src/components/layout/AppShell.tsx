@@ -6,7 +6,8 @@ import { useAlerts } from '../../hooks/useAlerts';
 import { useAppStore } from '../../store/appStore';
 import './AppShell.css';
 
-type Role = 'SUPER_ADMIN' | 'MD' | 'PM';
+type Role = 'SUPER_ADMIN' | 'MD' | 'PM' | 'PMC' | 'OA';
+
 
 /**
  * NICSI NPMS RBAC Navigation Model
@@ -89,7 +90,46 @@ const getNavItems = (lang: 'en' | 'hi'): Array<{ to: string; label: string; icon
       </svg>
     )
   },
+  // ── Tickets (MD + PM + PMC — work-item governance) ──
+  {
+    to: '/tickets',
+    label: lang === 'en' ? 'Tickets' : 'टिकट',
+    roles: ['MD', 'PM', 'PMC'],
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
+        <rect x="9" y="3" width="6" height="4" rx="1"/>
+        <path d="M9 12h6M9 16h4"/>
+      </svg>
+    )
+  },
+  // ── PMC Control Tower (PMC + MD only) ──
+  {
+    to: '/pmc',
+    label: lang === 'en' ? 'PMC Tower' : 'पीएमसी टावर',
+    roles: ['PMC', 'MD'],
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <rect x="1" y="3" width="15" height="13" rx="1"/>
+        <path d="M16 8h4a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-3"/>
+        <path d="M9 10l2 2 4-4"/>
+      </svg>
+    )
+  },
+  // ── My Tasks (OA personal queue) ──
+  {
+    to: '/my-tasks',
+    label: lang === 'en' ? 'My Tasks' : 'मेरे कार्य',
+    roles: ['OA', 'PM'],
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M9 11l3 3L22 4"/>
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+      </svg>
+    )
+  },
 ];
+
 
 // System Administration items — Super Admin only
 const getAdminItems = (lang: 'en' | 'hi'): Array<{ to: string; label: string; icon: React.ReactNode; roles: Role[] }> => [
@@ -122,7 +162,10 @@ const ROLE_LABELS: Record<Role, string> = {
   SUPER_ADMIN: 'Super Admin',
   MD: 'Managing Director',
   PM: 'Project Manager',
+  PMC: 'Monitoring Cell',
+  OA: 'Operational Asst.',
 };
+
 
 export const AppShell: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
