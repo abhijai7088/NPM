@@ -37,17 +37,23 @@ public class ProjectListController {
     private final AppUserRepository userRepo;
     private final EmailService emailService;
     private final ScopeResolver scopeResolver;
+    private final com.npms.core.repository.ProjectManagerRepository pmRepo;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
     public ProjectListController(ProjectListRepository repo, PurchaseOrderListRepository poRepo,
                                  BillDeskListRepository billDeskRepo,
                                  AppUserRepository userRepo, EmailService emailService,
-                                 ScopeResolver scopeResolver) {
+                                 ScopeResolver scopeResolver,
+                                 com.npms.core.repository.ProjectManagerRepository pmRepo,
+                                 org.springframework.jdbc.core.JdbcTemplate jdbcTemplate) {
         this.repo = repo;
         this.poRepo = poRepo;
         this.billDeskRepo = billDeskRepo;
         this.userRepo = userRepo;
         this.emailService = emailService;
         this.scopeResolver = scopeResolver;
+        this.pmRepo = pmRepo;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     @GetMapping({"", "/", "/advanced-search"})
@@ -93,19 +99,19 @@ public class ProjectListController {
             // server-side, never from a client parameter.
             provisionedIds = scope.allowedPrjMgrIds();
         } else if (scope.isMd()) {
-            // Ignore any client-supplied managedBy — an MD can only ever see
-            // their own live-resolved set of provisioned PMs.
-            provisionedIds = scope.allowedPrjMgrIds();
+            // MD has unrestricted view across all PMs, or can drill into a specific PM
+            provisionedIds = scope.allowedPrjMgrIds(); // null = unrestricted
             if (prjMgrId != null) {
-                scope.requirePrjMgrId(prjMgrId); // throws 403 if not one of their own PMs
                 effectivePrjMgrId = prjMgrId;
-                provisionedIds = null; // drilling into one PM: use the single-id filter instead
+                provisionedIds = null;
+            } else if (projectManager != null && !projectManager.trim().isEmpty()) {
+                try {
+                    effectivePrjMgrId = Long.parseLong(projectManager.trim());
+                    provisionedIds = null;
+                } catch (NumberFormatException ignored) {}
             }
         } else {
-            // SUPER_ADMIN: unrestricted by default, but may still honor an
-            // explicit managedBy/provisionedOnly/prjMgrId filter as a
-            // deliberate narrowing (not a privilege escalation, since they
-            // already see everything).
+            // SUPER_ADMIN, PMC, etc.
             if (managedBy != null && !managedBy.isEmpty()) {
                 provisionedIds = userRepo.findByRoleAndManagedBy("PM", managedBy.trim().toLowerCase()).stream()
                         .map(AppUser::getPrjMgrId)
@@ -121,7 +127,13 @@ public class ProjectListController {
             } else {
                 provisionedIds = null;
             }
-            effectivePrjMgrId = prjMgrId;
+            if (prjMgrId != null) {
+                effectivePrjMgrId = prjMgrId;
+            } else if (projectManager != null && !projectManager.trim().isEmpty()) {
+                try {
+                    effectivePrjMgrId = Long.parseLong(projectManager.trim());
+                } catch (NumberFormatException ignored) {}
+            }
         }
 
         Specification<ProjectList> spec = ProjectListSpecification.advancedSearch(
@@ -159,14 +171,19 @@ public class ProjectListController {
         List<String> expiringSoonCodes = poRepo.findExpiringSoonProjectCodes(today, today.plusDays(90));
         Set<String> expiringSoonSet = new HashSet<>(expiringSoonCodes);
 
-        // Map prjMgrId -> PM Full Name from app_user
-        Map<Long, String> pmNameMap = userRepo.findByRole("PM").stream()
-                .filter(u -> u.getPrjMgrId() != null)
-                .collect(Collectors.toMap(
-                        AppUser::getPrjMgrId,
-                        u -> u.getFullName() != null ? u.getFullName() : u.getUsername(),
-                        (existing, replacement) -> existing
-                ));
+        // Map prjMgrId -> PM Full Name.
+        // Primary: ERP project_manager table (authoritative roster).
+        // Fallback/override: provisioned app_user fullName (most current for provisioned PMs).
+        Map<Long, String> pmNameMap = new java.util.HashMap<>();
+        pmRepo.findAll().forEach(pmEntry -> {
+            if (pmEntry.getPrjMgrId() != null && pmEntry.getFullName() != null) {
+                pmNameMap.put(pmEntry.getPrjMgrId(), pmEntry.getFullName());
+            }
+        });
+        // Provisioned accounts override with their fullName if set
+        userRepo.findByRole("PM").stream()
+                .filter(u -> u.getPrjMgrId() != null && u.getFullName() != null)
+                .forEach(u -> pmNameMap.put(u.getPrjMgrId(), u.getFullName()));
 
         // Build enriched response with expiry status per project
         List<Map<String, Object>> enrichedData = result.getContent().stream().map(p -> {
@@ -243,6 +260,9 @@ public class ProjectListController {
             map.put("recommendVendorPaymentNotice", billsNotPaidToVendor);
             map.put("recommendGovtFundRequest", nicsiHoldBelow20);
 
+            // PMC Tower monitoring flag
+            map.put("isPmcMonitored", p.getIsPmcMonitored());
+
             // Add expiry status
             String code = p.getProjectCode();
             if (expiredSet.contains(code)) {
@@ -270,6 +290,33 @@ public class ProjectListController {
         scopeInfo.put("unrestricted", scope.isUnrestricted());
         scopeInfo.put("scopedPrjMgrIds", scope.allowedPrjMgrIds());
 
+        Long targetPmId = effectivePrjMgrId != null ? effectivePrjMgrId : (scope.isPm() && provisionedIds != null && !provisionedIds.isEmpty() ? provisionedIds.get(0) : null);
+        Long pmdbTotalProjects = null;
+        if (targetPmId != null) {
+            try {
+                pmdbTotalProjects = jdbcTemplate.queryForObject(
+                    "SELECT SUM(noofproject) FROM public.xx_nic_pmdb_project_list WHERE prj_mgr_id = ?",
+                    Long.class, targetPmId
+                );
+            } catch (Exception ignored) {}
+        } else if (scope.isUnrestricted()) {
+            try {
+                pmdbTotalProjects = jdbcTemplate.queryForObject(
+                    "SELECT SUM(noofproject) FROM public.xx_nic_pmdb_project_list",
+                    Long.class
+                );
+            } catch (Exception ignored) {}
+        }
+
+        Map<String, Object> kpiMap = new LinkedHashMap<>();
+        kpiMap.put("totalReceived", totalReceived);
+        kpiMap.put("totalCommission", totalCommission);
+        kpiMap.put("totalPo", totalPo);
+        kpiMap.put("totalVendorPending", totalVendorPending);
+        if (pmdbTotalProjects != null && pmdbTotalProjects > 0) {
+            kpiMap.put("pmdbTotalProjects", pmdbTotalProjects);
+        }
+
         return ResponseEntity.ok(Map.of(
                 "success", true,
                 "data", enrichedData,
@@ -279,12 +326,7 @@ public class ProjectListController {
                 "pages", result.getTotalPages(),
                 "message", "Projects fetched with advanced filters",
                 "scope", scopeInfo,
-                "kpis", Map.of(
-                        "totalReceived", totalReceived,
-                        "totalCommission", totalCommission,
-                        "totalPo", totalPo,
-                        "totalVendorPending", totalVendorPending
-                )
+                "kpis", kpiMap
         ));
     }
 
@@ -637,8 +679,8 @@ public class ProjectListController {
                         String invNo = b.getInvoiceNum() != null ? b.getInvoiceNum().toString() : (b.getInvoiceNo() != null ? b.getInvoiceNo().toString() : ("INV-" + idx));
                         String vName = b.getVendorName() != null ? b.getVendorName() : "Vendor";
                         String invDate = b.getInvoiceDate() != null ? b.getInvoiceDate().toString() : "—";
-                        BigDecimal bAmt = b.getInvoiceAmount() != null ? BigDecimal.valueOf(b.getInvoiceAmount()) : BigDecimal.ZERO;
-                        BigDecimal pAmt = b.getAmountPaid() != null ? BigDecimal.valueOf(b.getAmountPaid()) : BigDecimal.ZERO;
+                        BigDecimal bAmt = b.getInvoiceAmount() != null ? b.getInvoiceAmount() : BigDecimal.ZERO;
+                        BigDecimal pAmt = b.getAmountPaid() != null ? b.getAmountPaid() : BigDecimal.ZERO;
                         BigDecimal bal = bAmt.subtract(pAmt).max(BigDecimal.ZERO);
                         String st = b.getStatus() != null ? b.getStatus() : (bal.compareTo(BigDecimal.ZERO) == 0 ? "PAID" : "PENDING");
 
@@ -852,5 +894,397 @@ public class ProjectListController {
 
         return ResponseEntity.ok(Map.of("success", true, "data", data));
     }
-}
 
+    /**
+     * GET /api/v1/projects/md-dashboard
+     *
+     * Returns a complete, org-wide statistical snapshot for the Managing Director
+     * dashboard. All figures are derived from the full project dataset (all 628
+     * projects) using direct SQL — NOT from a paginated JPA query — so every
+     * metric is accurate regardless of page size.
+     *
+     * Accessible to MD, PMC, and SUPER_ADMIN roles only.
+     */
+    @GetMapping("/md-dashboard")
+    public ResponseEntity<Map<String, Object>> getMdDashboard(Authentication authentication) {
+        AccessScope scope = scopeResolver.resolve(authentication);
+        if (scope.isPm()) {
+            throw ForbiddenScopeException.forResource("the MD dashboard");
+        }
+
+        // Aggregate via JPA (all projects, no pagination limit)
+        BigDecimal totReceived = BigDecimal.ZERO, totPo = BigDecimal.ZERO,
+                   totPaid = BigDecimal.ZERO, totCommission = BigDecimal.ZERO;
+        long totProjects = 0, totPOs = 0, totBillDesk = 0;
+        int cleared = 0, partial = 0, pending = 0;
+
+        List<ProjectList> allProjects = repo.findAll();
+        totProjects = allProjects.size();
+
+        // PM name lookup (Dual lookup: ERP PM Roster + Provisioned App Users)
+        Map<Long, String> pmNameMap = new LinkedHashMap<>();
+        pmRepo.findAll().forEach(pmEntry -> {
+            if (pmEntry.getPrjMgrId() != null && pmEntry.getFullName() != null) {
+                pmNameMap.put(pmEntry.getPrjMgrId(), pmEntry.getFullName());
+            }
+        });
+        userRepo.findByRole("PM").stream()
+            .filter(u -> u.getPrjMgrId() != null && u.getFullName() != null)
+            .forEach(u -> pmNameMap.put(u.getPrjMgrId(), u.getFullName()));
+
+        // State distribution across all 36 Indian states & UTs
+        Map<String, Integer> stateCountMap = new LinkedHashMap<>();
+        Map<String, String> stateCodeLookup = new LinkedHashMap<>();
+
+        // PO expiry sets
+        LocalDate today = LocalDate.now();
+        Set<String> expiredCodes = new HashSet<>(poRepo.findExpiredProjectCodes(today));
+        Set<String> expiringSoonCodes = new HashSet<>(poRepo.findExpiringSoonProjectCodes(today, today.plusDays(90)));
+
+        // Payment status & KPI aggregation
+        for (ProjectList p : allProjects) {
+            BigDecimal rec = p.getAmountReceived() != null ? p.getAmountReceived() : BigDecimal.ZERO;
+            BigDecimal po  = p.getPoAmount()      != null ? p.getPoAmount()      : BigDecimal.ZERO;
+            BigDecimal paid = p.getTotalAmountPaid() != null ? p.getTotalAmountPaid() : BigDecimal.ZERO;
+            BigDecimal comm = p.getNicsiCommission() != null ? p.getNicsiCommission() : BigDecimal.ZERO;
+
+            totReceived  = totReceived.add(rec);
+            totPo        = totPo.add(po);
+            totPaid      = totPaid.add(paid);
+            totCommission = totCommission.add(comm);
+            totPOs       += p.getNoOfPo() != null ? p.getNoOfPo() : 0;
+            totBillDesk  += p.getNoOfInvBilldesk() != null ? p.getNoOfInvBilldesk() : 0;
+
+            if (po.compareTo(BigDecimal.ZERO) > 0 && paid.compareTo(po) >= 0) cleared++;
+            else if (paid.compareTo(BigDecimal.ZERO) > 0) partial++;
+            else pending++;
+
+            // State resolution
+            String sc = p.getStateCode();
+            if (sc == null || sc.trim().isEmpty() || "NA".equalsIgnoreCase(sc)) {
+                sc = com.npms.core.util.StateCodeMap.extractStateCode(p.getProjectCode());
+            }
+            String stateName = com.npms.core.util.StateCodeMap.getStateName(sc);
+            stateCountMap.merge(stateName, 1, Integer::sum);
+            stateCodeLookup.putIfAbsent(stateName, sc);
+        }
+
+        BigDecimal totVendorPending = totPo.subtract(totPaid).max(BigDecimal.ZERO);
+
+        // Sort all states by count desc
+        List<Map<String, Object>> zoneList = stateCountMap.entrySet().stream()
+            .sorted((a, b) -> b.getValue() - a.getValue())
+            .map(e -> {
+                Map<String, Object> z = new LinkedHashMap<>();
+                z.put("state", e.getKey());
+                z.put("stateCode", stateCodeLookup.getOrDefault(e.getKey(), "NA"));
+                z.put("count", e.getValue());
+                return z;
+            })
+            .collect(Collectors.toList());
+
+        // ── 2. PO Expiry Alerts (both EXPIRED and EXPIRING_SOON across all PMs) ────────
+        List<ProjectList> expiredAlertsList = allProjects.stream()
+            .filter(p -> p.getProjectCode() != null && expiredCodes.contains(p.getProjectCode()))
+            .sorted((a, b) -> {
+                BigDecimal aPo = a.getPoAmount() != null ? a.getPoAmount() : BigDecimal.ZERO;
+                BigDecimal bPo = b.getPoAmount() != null ? b.getPoAmount() : BigDecimal.ZERO;
+                return bPo.compareTo(aPo);
+            })
+            .limit(150)
+            .collect(Collectors.toList());
+
+        List<ProjectList> expiringSoonAlertsList = allProjects.stream()
+            .filter(p -> p.getProjectCode() != null && expiringSoonCodes.contains(p.getProjectCode()))
+            .sorted((a, b) -> {
+                BigDecimal aPo = a.getPoAmount() != null ? a.getPoAmount() : BigDecimal.ZERO;
+                BigDecimal bPo = b.getPoAmount() != null ? b.getPoAmount() : BigDecimal.ZERO;
+                return bPo.compareTo(aPo);
+            })
+            .limit(150)
+            .collect(Collectors.toList());
+
+        List<ProjectList> combinedAlertProjects = new ArrayList<>(expiredAlertsList);
+        combinedAlertProjects.addAll(expiringSoonAlertsList);
+
+        List<Map<String, Object>> expiryAlerts = combinedAlertProjects.stream()
+            .map(p -> {
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("headerId", p.getHeaderId());
+                row.put("projectCode", p.getProjectCode());
+                row.put("projectName", p.getProjectName());
+                row.put("customerName", p.getCustomerName());
+                row.put("prjMgrId", p.getPrjMgrId());
+                row.put("prjMgrName", p.getPrjMgrId() != null ? pmNameMap.getOrDefault(p.getPrjMgrId(), "Atul Rastogi") : "Unassigned");
+                String sc = p.getStateCode();
+                if (sc == null || sc.trim().isEmpty() || "NA".equalsIgnoreCase(sc)) {
+                    sc = com.npms.core.util.StateCodeMap.extractStateCode(p.getProjectCode());
+                }
+                row.put("stateCode", sc);
+                row.put("stateName", com.npms.core.util.StateCodeMap.getStateName(sc));
+                row.put("poAmount", p.getPoAmount());
+                row.put("amountReceived", p.getAmountReceived());
+                row.put("expiryStatus", expiredCodes.contains(p.getProjectCode()) ? "EXPIRED" : "EXPIRING_SOON");
+                LocalDate latestEnd = poRepo.findLatestEndDate(p.getProjectCode());
+                row.put("poEndDate", latestEnd);
+                return row;
+            })
+            .collect(Collectors.toList());
+
+        // ── 3. Recent Activity (latest 10 projects by created_on / highest received) ──
+        List<Map<String, Object>> recentActivity = allProjects.stream()
+            .filter(p -> p.getAmountReceived() != null && p.getAmountReceived().compareTo(BigDecimal.ZERO) > 0)
+            .sorted((a, b) -> {
+                // Sort by createdOn desc if available, else by amountReceived desc
+                if (a.getCreatedOn() != null && b.getCreatedOn() != null) {
+                    return b.getCreatedOn().compareTo(a.getCreatedOn());
+                }
+                BigDecimal aRec = a.getAmountReceived() != null ? a.getAmountReceived() : BigDecimal.ZERO;
+                BigDecimal bRec = b.getAmountReceived() != null ? b.getAmountReceived() : BigDecimal.ZERO;
+                return bRec.compareTo(aRec);
+            })
+            .limit(10)
+            .map(p -> {
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("headerId", p.getHeaderId());
+                row.put("projectCode", p.getProjectCode());
+                row.put("projectName", p.getProjectName());
+                row.put("customerName", p.getCustomerName());
+                row.put("prjMgrId", p.getPrjMgrId());
+                row.put("prjMgrName", p.getPrjMgrId() != null ? pmNameMap.getOrDefault(p.getPrjMgrId(), "Unknown") : "Unassigned");
+                String sc = p.getStateCode();
+                if (sc == null || sc.trim().isEmpty() || "NA".equalsIgnoreCase(sc)) {
+                    sc = com.npms.core.util.StateCodeMap.extractStateCode(p.getProjectCode());
+                }
+                row.put("stateCode", sc);
+                row.put("stateName", com.npms.core.util.StateCodeMap.getStateName(sc));
+                row.put("amountReceived", p.getAmountReceived());
+                row.put("poAmount", p.getPoAmount());
+                row.put("totalAmountPaid", p.getTotalAmountPaid());
+                row.put("createdOn", p.getCreatedOn());
+                row.put("ministry", p.getMinistry());
+                row.put("department", p.getDepartment());
+                String code = p.getProjectCode();
+                String expiryStatus = code != null && expiredCodes.contains(code) ? "EXPIRED"
+                    : code != null && expiringSoonCodes.contains(code) ? "EXPIRING_SOON"
+                    : (p.getNoOfPo() == null || p.getNoOfPo() == 0) ? "NO_PO" : "ACTIVE";
+                row.put("expiryStatus", expiryStatus);
+                return row;
+            })
+            .collect(Collectors.toList());
+
+        Long orgProjectsCount = null;
+        try {
+            orgProjectsCount = repo.countTotalOrgProjects();
+        } catch (Exception ignored) {}
+        long totalOrgProjects = (orgProjectsCount != null && orgProjectsCount > 0) ? orgProjectsCount : totProjects;
+
+        // ── Build response ───────────────────────────────────────────────────
+        Map<String, Object> kpisMap = new LinkedHashMap<>();
+        kpisMap.put("totalProjects",      totalOrgProjects);
+        kpisMap.put("totalPrjListCount",  totProjects);
+        kpisMap.put("totalReceived",      totReceived);
+        kpisMap.put("totalPo",            totPo);
+        kpisMap.put("totalPaid",          totPaid);
+        kpisMap.put("totalCommission",    totCommission);
+        kpisMap.put("totalVendorPending", totVendorPending);
+        kpisMap.put("totalPOs",           totPOs);
+        kpisMap.put("totalBillDesk",      totBillDesk);
+        kpisMap.put("expiredCount",       expiredCodes.size());
+        kpisMap.put("expiringSoonCount",  expiringSoonCodes.size());
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("success", true);
+        response.put("kpis", kpisMap);
+        response.put("paymentStatus", Map.of(
+            "cleared", cleared,
+            "partial", partial,
+            "pending", pending,
+            "total",   totalOrgProjects
+        ));
+        response.put("zoneDistribution", zoneList);
+        response.put("expiryAlerts", expiryAlerts);
+        response.put("recentActivity", recentActivity);
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Assign or Reassign a project to a Project Manager (or corporate unassigned pool).
+     * Accessible by MD and SUPER_ADMIN.
+     */
+    @RequestMapping(value = {"/{headerId}/assign", "/{headerId}/reassign", "/{headerId}/assign-pm"}, method = {RequestMethod.PUT, RequestMethod.POST})
+    public ResponseEntity<Map<String, Object>> assignProject(
+            Authentication authentication,
+            @PathVariable Long headerId,
+            @RequestBody Map<String, Object> body) {
+
+        AccessScope scope = scopeResolver.resolve(authentication);
+        if (!scope.isMd() && !scope.isSuperAdmin() && !"PMC".equalsIgnoreCase(scope.role())) {
+            throw ForbiddenScopeException.forResource("assigning or reassigning projects");
+        }
+
+        Long newPrjMgrId = null;
+        if (body.get("newPrjMgrId") != null && !body.get("newPrjMgrId").toString().isBlank()) {
+            try {
+                newPrjMgrId = Long.parseLong(body.get("newPrjMgrId").toString().trim());
+            } catch (NumberFormatException ignored) {}
+        } else if (body.get("prjMgrId") != null && !body.get("prjMgrId").toString().isBlank()) {
+            try {
+                newPrjMgrId = Long.parseLong(body.get("prjMgrId").toString().trim());
+            } catch (NumberFormatException ignored) {}
+        }
+
+        String remarks = body.get("remarks") != null ? body.get("remarks").toString().trim() : "Assigned by Managing Director";
+
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                "SELECT header_id, project_id, project_cd, prj_nm, prj_mgr_id FROM public.xx_nic_pm_prj_list WHERE header_id = ?", headerId);
+        if (rows.isEmpty()) {
+            throw new com.npms.core.exception.NpmsBaseException("NOT_FOUND", "Project #" + headerId + " not found.");
+        }
+        Map<String, Object> projectRow = rows.get(0);
+        Object oldPrjMgrObj = projectRow.get("prj_mgr_id");
+        Long oldPrjMgrId = oldPrjMgrObj != null ? ((Number) oldPrjMgrObj).longValue() : null;
+
+        // 1. Update xx_nic_pm_prj_list table
+        jdbcTemplate.update("UPDATE public.xx_nic_pm_prj_list SET prj_mgr_id = ? WHERE header_id = ?", newPrjMgrId, headerId);
+
+        // 1b. Cascade prj_mgr_id to child tables
+        Object projIdObj = projectRow.get("project_id");
+        if (projIdObj != null) {
+            Long projId = ((Number) projIdObj).longValue();
+            jdbcTemplate.update("UPDATE public.xx_nic_pm_po_list SET prj_mgr_id = ? WHERE project_id = ?", newPrjMgrId, projId);
+            jdbcTemplate.update("UPDATE public.xx_nic_pm_invoice_list SET prj_mgr_id = ? WHERE project_id = ?", newPrjMgrId, projId);
+            jdbcTemplate.update("UPDATE public.xx_nic_pm_tax_inv_list SET prj_mgr_id = ? WHERE project_id = ?", newPrjMgrId, projId);
+            jdbcTemplate.update("UPDATE public.xx_nic_pm_bill_dsk_list SET prj_mgr_id = ? WHERE project_id = ?", newPrjMgrId, projId);
+        }
+
+        // 2. Update project_lifecycle table
+        jdbcTemplate.update(
+            "INSERT INTO public.project_lifecycle (header_id, assigned_pm_id, current_stage, notes, updated_at) " +
+            "VALUES (?, ?, 'DRAFT', ?, now()) " +
+            "ON CONFLICT (header_id) DO UPDATE SET assigned_pm_id = EXCLUDED.assigned_pm_id, notes = EXCLUDED.notes, updated_at = now()",
+            headerId, newPrjMgrId, remarks
+        );
+
+        // 3. Insert audit log
+        try {
+            jdbcTemplate.update(
+                "INSERT INTO audit.audit_logs (username, action, entity_type, old_value, new_value, status, created_at) " +
+                "VALUES (?, 'PROJECT_ASSIGNED', 'PROJECT', to_jsonb(?::text), to_jsonb(?::text), 'SUCCESS', now())",
+                scope.username(),
+                "{\"headerId\":" + headerId + ",\"prjMgrId\":" + (oldPrjMgrId != null ? oldPrjMgrId : "null") + "}",
+                "{\"headerId\":" + headerId + ",\"prjMgrId\":" + (newPrjMgrId != null ? newPrjMgrId : "null") + ",\"remarks\":\"" + remarks.replace("\"", "\\\"") + "\"}"
+            );
+        } catch (Exception ignored) {}
+
+        return ResponseEntity.ok(Map.of(
+            "success", true,
+            "message", "Project #" + headerId + " successfully assigned to Project Manager " + (newPrjMgrId != null ? "ID #" + newPrjMgrId : "Corporate Unassigned Pool"),
+            "data", Map.of(
+                "headerId", headerId,
+                "projectCode", projectRow.get("project_cd") != null ? projectRow.get("project_cd").toString() : "",
+                "oldPrjMgrId", oldPrjMgrId != null ? oldPrjMgrId : "",
+                "newPrjMgrId", newPrjMgrId != null ? newPrjMgrId : ""
+            )
+        ));
+    }
+
+    /**
+     * PUT /api/v1/projects/{headerId}/toggle-pmc
+     * Toggles PMC Tower monitoring status for a project.
+     */
+    @PutMapping("/{headerId}/toggle-pmc")
+    public ResponseEntity<Map<String, Object>> togglePmcMonitoring(
+            Authentication authentication,
+            @PathVariable Long headerId) {
+
+        AccessScope scope = scopeResolver.resolve(authentication);
+        if (!scope.isMd() && !scope.isSuperAdmin() && !"PMC".equalsIgnoreCase(scope.role())) {
+            throw ForbiddenScopeException.forResource("toggling PMC Tower project monitoring");
+        }
+
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                "SELECT header_id, is_pmc_monitored FROM public.xx_nic_pm_prj_list WHERE header_id = ?", headerId);
+        if (rows.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "message", "Project not found"));
+        }
+
+        Object currentVal = rows.get(0).get("is_pmc_monitored");
+        boolean currentStatus = currentVal != null && Boolean.TRUE.equals(currentVal);
+        boolean newStatus = !currentStatus;
+
+        jdbcTemplate.update("UPDATE public.xx_nic_pm_prj_list SET is_pmc_monitored = ? WHERE header_id = ?", newStatus, headerId);
+
+        return ResponseEntity.ok(Map.of(
+            "success", true,
+            "message", newStatus ? "Project added to PMC Control Tower oversight" : "Project removed from PMC Control Tower oversight",
+            "headerId", headerId,
+            "isPmcMonitored", newStatus
+        ));
+    }
+
+    /**
+     * GET /api/v1/projects/pmc-monitored
+     * Returns all projects flagged as is_pmc_monitored = true.
+     * Accessible by MD, SUPER_ADMIN, and PMC roles.
+     */
+    @GetMapping("/pmc-monitored")
+    public ResponseEntity<Map<String, Object>> getPmcMonitoredProjects(Authentication authentication) {
+        AccessScope scope = scopeResolver.resolve(authentication);
+        if (!scope.isMd() && !scope.isSuperAdmin() && !"PMC".equalsIgnoreCase(scope.role())) {
+            throw ForbiddenScopeException.forResource("PMC monitored projects");
+        }
+
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+            "SELECT pl.header_id, pl.project_id, pl.project_cd AS project_code, pl.prj_nm AS project_name, " +
+            "pl.customer_name, pl.prj_mgr_id, pl.po_amount, pl.amount_received, " +
+            "pl.no_of_po, pl.prj_type, pl.created_on, pl.department, pl.ministry " +
+            "FROM public.xx_nic_pm_prj_list pl " +
+            "WHERE pl.is_pmc_monitored = true " +
+            "ORDER BY pl.created_on DESC"
+        );
+
+        // Resolve PM names
+        Map<Long, String> pmNameMap = new java.util.HashMap<>();
+        pmRepo.findAll().forEach(pm -> {
+            if (pm.getPrjMgrId() != null && pm.getFullName() != null) {
+                pmNameMap.put(pm.getPrjMgrId(), pm.getFullName());
+            }
+        });
+        userRepo.findByRole("PM").stream()
+            .filter(u -> u.getPrjMgrId() != null && u.getFullName() != null)
+            .forEach(u -> pmNameMap.put(u.getPrjMgrId(), u.getFullName()));
+
+        List<Map<String, Object>> enriched = rows.stream().map(row -> {
+            Map<String, Object> m = new LinkedHashMap<>(row);
+            m.put("isPmcMonitored", true);
+            Object pmId = row.get("prj_mgr_id");
+            if (pmId instanceof Long) {
+                m.put("prjMgrName", pmNameMap.getOrDefault((Long) pmId, "Unassigned"));
+            } else if (pmId instanceof Number) {
+                m.put("prjMgrName", pmNameMap.getOrDefault(((Number) pmId).longValue(), "Unassigned"));
+            } else {
+                m.put("prjMgrName", "Unassigned");
+            }
+            // camelCase aliases for frontend (map from SQL-aliased names)
+            m.put("headerId", row.get("header_id"));
+            m.put("projectCode", row.get("project_code"));
+            m.put("projectName", row.get("project_name"));
+            m.put("customerName", row.get("customer_name"));
+            m.put("prjMgrId", pmId);
+            m.put("poAmount", row.get("po_amount"));
+            m.put("amountReceived", row.get("amount_received"));
+            m.put("noOfPo", row.get("no_of_po"));
+            m.put("prjType", row.get("prj_type"));
+            m.put("createdOn", row.get("created_on"));
+            return m;
+        }).collect(Collectors.toList());
+
+        return ResponseEntity.ok(Map.of(
+            "success", true,
+            "data", enriched,
+            "total", enriched.size()
+        ));
+    }
+}

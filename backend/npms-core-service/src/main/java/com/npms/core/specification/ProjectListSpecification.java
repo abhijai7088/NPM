@@ -9,6 +9,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Specification for advanced project filtering including PO-based expiry detection.
@@ -212,38 +213,51 @@ public class ProjectListSpecification {
                 ));
             }
 
-            // Project Manager
-            if (projectManager != null && !projectManager.isEmpty()) {
-                String pm = "%" + projectManager.toLowerCase() + "%";
-                predicates.add(criteriaBuilder.or(
-                    criteriaBuilder.like(criteriaBuilder.lower(root.get("hodEmail")), pm),
-                    criteriaBuilder.like(criteriaBuilder.lower(root.get("userEmail")), pm),
-                    criteriaBuilder.like(criteriaBuilder.lower(root.get("nicCoordEmail")), pm),
-                    criteriaBuilder.like(criteriaBuilder.lower(root.get("staffEmailId")), pm)
-                ));
+            // Project Manager filter (supports numeric prjMgrId, PM name, email, or UNASSIGNED)
+            if (projectManager != null && !projectManager.trim().isEmpty()) {
+                String pmTrim = projectManager.trim();
+                if ("UNASSIGNED".equalsIgnoreCase(pmTrim) || "0".equals(pmTrim)) {
+                    predicates.add(criteriaBuilder.isNull(root.get("prjMgrId")));
+                } else {
+                    List<Predicate> pmPreds = new ArrayList<>();
+                    try {
+                        Long pmId = Long.parseLong(pmTrim);
+                        pmPreds.add(criteriaBuilder.equal(root.get("prjMgrId"), pmId));
+                    } catch (NumberFormatException ignored) {}
+
+                    String pmLike = "%" + pmTrim.toLowerCase() + "%";
+                    pmPreds.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("hodEmail")), pmLike));
+                    pmPreds.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("userEmail")), pmLike));
+                    pmPreds.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("nicCoordEmail")), pmLike));
+                    pmPreds.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("staffEmailId")), pmLike));
+                    predicates.add(criteriaBuilder.or(pmPreds.toArray(new Predicate[0])));
+                }
             }
 
-            // State (Normalized lookup against master.states via State entity)
-            if (state != null && !state.isEmpty()) {
-                if ("N/A".equalsIgnoreCase(state) || "NA".equalsIgnoreCase(state)) {
+            // State filter (supports 2-letter state codes e.g. TS, ND, AP, PY or full State Names e.g. Telangana, New Delhi, Andhra Pradesh)
+            if (state != null && !state.trim().isEmpty()) {
+                String sTrim = state.trim();
+                if ("N/A".equalsIgnoreCase(sTrim) || "NA".equalsIgnoreCase(sTrim)) {
                     predicates.add(criteriaBuilder.or(
                         criteriaBuilder.isNull(root.get("stateCode")),
                         criteriaBuilder.equal(root.get("stateCode"), ""),
+                        criteriaBuilder.equal(criteriaBuilder.lower(root.get("stateCode")), "na"),
                         criteriaBuilder.equal(criteriaBuilder.lower(root.get("stateCode")), "n/a")
                     ));
                 } else {
-                    String st = "%" + state.toLowerCase() + "%";
-                    Subquery<String> stateSub = query.subquery(String.class);
-                    Root<State> stateRoot = stateSub.from(State.class);
-                    stateSub.select(stateRoot.get("stateCode"));
-                    stateSub.where(criteriaBuilder.or(
-                        criteriaBuilder.like(criteriaBuilder.lower(stateRoot.get("stateName")), st),
-                        criteriaBuilder.like(criteriaBuilder.lower(stateRoot.get("stateCode")), st)
-                    ));
-                    predicates.add(criteriaBuilder.or(
-                        root.get("stateCode").in(stateSub),
-                        criteriaBuilder.like(criteriaBuilder.lower(root.get("stateCode")), st)
-                    ));
+                    String stLike = "%" + sTrim.toLowerCase() + "%";
+                    List<Predicate> statePreds = new ArrayList<>();
+                    statePreds.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("stateCode")), stLike));
+                    statePreds.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("projectCode")), "%" + sTrim.toLowerCase()));
+
+                    // Match all state codes from StateCodeMap where state name matches
+                    for (Map.Entry<String, String> entry : com.npms.core.util.StateCodeMap.getAllStates().entrySet()) {
+                        if (entry.getValue().toLowerCase().contains(sTrim.toLowerCase()) || entry.getKey().equalsIgnoreCase(sTrim)) {
+                            statePreds.add(criteriaBuilder.equal(criteriaBuilder.upper(root.get("stateCode")), entry.getKey().toUpperCase()));
+                            statePreds.add(criteriaBuilder.like(criteriaBuilder.upper(root.get("projectCode")), "%" + entry.getKey().toUpperCase()));
+                        }
+                    }
+                    predicates.add(criteriaBuilder.or(statePreds.toArray(new Predicate[0])));
                 }
             }
 
@@ -254,8 +268,21 @@ public class ProjectListSpecification {
             if (department != null && !department.isEmpty()) {
                 predicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("department")), "%" + department.toLowerCase() + "%"));
             }
-            if (projectCategory != null && !projectCategory.isEmpty()) {
-                predicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("projectCategory")), "%" + projectCategory.toLowerCase() + "%"));
+            if (projectCategory != null && !projectCategory.trim().isEmpty() && !"__ALL__".equalsIgnoreCase(projectCategory.trim())) {
+                String catRaw = projectCategory.trim().toUpperCase();
+                String code = resolveCategoryCode(catRaw).toUpperCase();
+
+                Expression<String> typeExp = criteriaBuilder.upper(criteriaBuilder.coalesce(root.get("prjType"), ""));
+                Expression<String> catExp = criteriaBuilder.upper(criteriaBuilder.coalesce(root.get("projectCategory"), ""));
+                Expression<String> codeExp = criteriaBuilder.upper(criteriaBuilder.coalesce(root.get("projectCode"), ""));
+
+                predicates.add(criteriaBuilder.or(
+                        criteriaBuilder.equal(typeExp, catRaw),
+                        criteriaBuilder.equal(typeExp, code),
+                        criteriaBuilder.like(typeExp, "%" + catRaw + "%"),
+                        criteriaBuilder.like(catExp, "%" + catRaw + "%"),
+                        criteriaBuilder.like(codeExp, "%" + code + "%")
+                ));
             }
 
             // Commission Rate filter (approximation using commission/received ratio)
@@ -292,5 +319,40 @@ public class ProjectListSpecification {
 
             return criteriaBuilder.and(predicates.toArray(new Predicate[0]));
         };
+    }
+
+    private static String resolveCategoryCode(String cat) {
+        if (cat == null) return "";
+        String c = cat.toLowerCase().trim();
+        if (c.equals("mp") || c.contains("manpower")) return "MP";
+        if (c.equals("gn") || c.contains("general")) return "GN";
+        if (c.equals("mi") || c.contains("miscellaneous")) return "MI";
+        if (c.equals("sp") || c.contains("shastri")) return "SP";
+        if (c.equals("wd") || c.contains("web dev")) return "WD";
+        if (c.equals("oc") || c.contains("other cloud") || c.contains("cloud")) return "OC";
+        if (c.equals("zo") || c.contains("zoho")) return "ZO";
+        if (c.equals("eo") || c.contains("e-office") || c.contains("eoffice")) return "EO";
+        if (c.equals("nc") || c.contains("national gov") || c.contains("national")) return "NC";
+        if (c.equals("nw") || c.contains("network")) return "NW";
+        if (c.equals("hw") || c.contains("hardware")) return "HW";
+        if (c.equals("ep") || c.contains("e-procur") || c.contains("eproc")) return "EP";
+        if (c.equals("ba") || c.contains("bas")) return "BA";
+        if (c.equals("sm") || c.contains("sms")) return "SM";
+        if (c.equals("sn") || c.contains("scan") || c.contains("digit")) return "SN";
+        if (c.equals("dc") || c.contains("data center")) return "DC";
+        if (c.equals("dv") || c.contains("data vault") || c.contains("vault")) return "DV";
+        if (c.equals("rl") || c.contains("rollout")) return "RL";
+        if (c.equals("ds") || c.contains("digital sig")) return "DS";
+        if (c.equals("sw") || c.contains("software")) return "SW";
+        if (c.equals("ws") || c.contains("work st sp")) return "WS";
+        if (c.equals("em") || c.contains("e-mail") || c.contains("email")) return "EM";
+        if (c.equals("eh") || c.contains("hospital")) return "EH";
+        if (c.equals("cd") || c.contains("ceda")) return "CD";
+        if (c.equals("in") || c.contains("internal")) return "IN";
+        if (c.equals("wl") || c.contains("work st ln")) return "WL";
+        if (c.equals("ln") || c.contains("laxmindc")) return "LN";
+        if (c.equals("sd") || c.contains("software dev")) return "SD";
+        if (c.equals("cs") || c.contains("contract")) return "CS";
+        return cat;
     }
 }

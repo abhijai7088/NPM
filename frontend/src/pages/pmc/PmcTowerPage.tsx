@@ -9,6 +9,8 @@ import { getOverdueProjects, getOnHoldProjects, getStageCounts, STAGE_LABELS } f
 import { TicketDetailModal } from '../../components/tickets/TicketDetailModal';
 import './PmcTowerPage.css';
 
+import axios from 'axios';
+
 export const PmcTowerPage: React.FC = () => {
   const [overdue, setOverdue]       = useState<ProjectTicket[]>([]);
   const [escalated, setEscalated]   = useState<ProjectTicket[]>([]);
@@ -16,19 +18,21 @@ export const PmcTowerPage: React.FC = () => {
   const [stageCounts, setStageCounts] = useState<Record<string,number>>({});
   const [overdueProjects, setOverdueProjects] = useState<any[]>([]);
   const [heldProjects, setHeldProjects]       = useState<any[]>([]);
+  const [pmcProjects, setPmcProjects]         = useState<any[]>([]);
   const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
     setLoading(true);
     try {
-      const [od, esc, pri, sc, op, hp] = await Promise.allSettled([
+      const [od, esc, pri, sc, op, hp, pmcRes] = await Promise.allSettled([
         getOverdueTickets(),
         getEscalatedTickets(),
         getPrioritySummary(),
         getStageCounts(),
         getOverdueProjects(),
         getOnHoldProjects(),
+        axios.get('/api/v1/projects/pmc-monitored')
       ]);
       if (od.status === 'fulfilled') setOverdue(od.value.data ?? []);
       if (esc.status === 'fulfilled') setEscalated(esc.value.data ?? []);
@@ -36,6 +40,9 @@ export const PmcTowerPage: React.FC = () => {
       if (sc.status === 'fulfilled') setStageCounts(sc.value.data ?? {});
       if (op.status === 'fulfilled') setOverdueProjects(op.value.data ?? []);
       if (hp.status === 'fulfilled') setHeldProjects(hp.value.data ?? []);
+      if (pmcRes.status === 'fulfilled' && pmcRes.value.data?.success) {
+        setPmcProjects(pmcRes.value.data.data || []);
+      }
     } finally {
       setLoading(false);
     }
@@ -226,6 +233,75 @@ export const PmcTowerPage: React.FC = () => {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* 🏰 PMC Monitored Projects Desk */}
+          <div className="pmc-card" style={{ marginTop: '1.5rem', padding: '1.25rem', borderRadius: '12px', background: '#ffffff', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0, 51, 102, 0.06)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.75rem' }}>
+              <div>
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#003366', margin: 0 }}>
+                  🏰 PMC Tower Monitored Projects Desk
+                </h3>
+                <p style={{ fontSize: '0.78rem', color: '#64748b', margin: '4px 0 0 0' }}>
+                  Projects flagged by Admin/MD for active Project Monitoring Cell oversight & compliance tracking.
+                </p>
+              </div>
+              <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '3px 12px', borderRadius: '9999px', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd' }}>
+                {pmcProjects.length} PMC Monitored Projects
+              </span>
+            </div>
+
+            {pmcProjects.length === 0 ? (
+              <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b', fontSize: '0.85rem' }}>
+                No projects added to PMC Tower yet. Admin/MD can add projects to PMC oversight from the Allocation Desk.
+              </div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ background: '#f8fafc', color: '#64748b', textTransform: 'uppercase', fontSize: '0.7rem', borderBottom: '1px solid #e2e8f0' }}>
+                      <th style={{ padding: '0.65rem 0.8rem' }}>Project Code</th>
+                      <th style={{ padding: '0.65rem 0.8rem' }}>Project Name & Client</th>
+                      <th style={{ padding: '0.65rem 0.8rem' }}>Type</th>
+                      <th style={{ padding: '0.65rem 0.8rem' }}>PO Value</th>
+                      <th style={{ padding: '0.65rem 0.8rem' }}>PMC Status</th>
+                      <th style={{ padding: '0.65rem 0.8rem', textAlign: 'right' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pmcProjects.map((p: any) => (
+                      <tr key={p.headerId} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '0.65rem 0.8rem', fontFamily: 'monospace', fontWeight: 700, color: '#00509d' }}>
+                          {p.projectCode}
+                        </td>
+                        <td style={{ padding: '0.65rem 0.8rem' }}>
+                          <div style={{ fontWeight: 600, color: '#1e293b' }}>{p.projectName}</div>
+                          <div style={{ fontSize: '0.72rem', color: '#64748b' }}>{p.customerName}</div>
+                        </td>
+                        <td style={{ padding: '0.65rem 0.8rem' }}>
+                          <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: '#f1f5f9', color: '#475569' }}>
+                            {p.prjType || 'GN'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '0.65rem 0.8rem', fontWeight: 700, color: '#334155' }}>
+                          ₹{((p.poAmount || 0) / 100000).toFixed(2)} L
+                        </td>
+                        <td style={{ padding: '0.65rem 0.8rem' }}>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '3px 8px', borderRadius: '9999px', background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0' }}>
+                            🏰 PMC Monitored
+                          </span>
+                        </td>
+                        <td style={{ padding: '0.65rem 0.8rem', textAlign: 'right' }}>
+                          <a href={`/projects?search=${encodeURIComponent(p.projectCode)}`} style={{ fontSize: '0.75rem', fontWeight: 700, color: '#006699', textDecoration: 'none' }}>
+                            View Details →
+                          </a>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </>
       )}

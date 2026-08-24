@@ -12,6 +12,7 @@ export interface AdvancedFilterState {
   vendorBillNotSubmitted: boolean;
   projectManager: string;
   state: string;
+  projectType?: string;
   expiryStatus: string;
   expiryDays: string;
   nicsiHoldLessThan20: boolean;
@@ -63,7 +64,7 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({ filters, setFi
       });
 
     // 2. Fetch Projects for dynamic options
-    axios.get('/api/v1/projects/advanced-search?page=0&size=1000')
+    axios.get('/api/v1/projects/advanced-search?page=0&size=3000')
       .then(res => {
         if (res.data && res.data.data) {
           const prjSet = new Map<string, SelectOption>();
@@ -203,6 +204,38 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({ filters, setFi
             allOptionLabel="All States / Regions"
             allowNa={true}
             naLabel="N/A (Unspecified State)"
+          />
+        </div>
+
+        {/* 3b. Project Type / Category */}
+        <div className="af-field">
+          <label className="af-label">Project Type / Category</label>
+          <SearchableSelect
+            value={filters.projectType || ''}
+            onChange={(val) => setFilters(prev => ({ ...prev, projectType: val }))}
+            options={[
+              { value: 'OC', label: 'Other Cloud Services (OC)', badge: '647' },
+              { value: 'MP', label: 'Manpower / Support (MP)', badge: '539' },
+              { value: 'EO', label: 'E-Office Services (EO)', badge: '337' },
+              { value: 'GN', label: 'General Services (GN)', badge: '297' },
+              { value: 'ZO', label: 'ZOHO E-Mail Services (ZO)', badge: '79' },
+              { value: 'MI', label: 'Miscellaneous (MI)', badge: '79' },
+              { value: 'SP', label: 'Specialized Project (SP)', badge: '66' },
+              { value: 'WD', label: 'Web Development (WD)', badge: '47' },
+              { value: 'NW', label: 'Network Services (NW)', badge: '38' },
+              { value: 'HW', label: 'Hardware Procurement (HW)', badge: '31' },
+              { value: 'BA', label: 'BAS Services (BA)', badge: '17' },
+              { value: 'SN', label: 'Scanning & Digitization (SN)', badge: '14' },
+              { value: 'CD', label: 'CEDA Projects (CD)', badge: '9' },
+              { value: 'RL', label: 'Rollout Services (RL)', badge: '4' },
+              { value: 'DS', label: 'Digital Signature (DS)', badge: '3' },
+              { value: 'SW', label: 'Software Development (SW)', badge: '2' },
+              { value: 'DV', label: 'Data Vault (DV)', badge: '2' },
+              { value: 'DC', label: 'Data Center Services (DC)', badge: '1' },
+            ]}
+            placeholder="All Project Types"
+            searchPlaceholder="Search project type..."
+            allOptionLabel="All Project Types"
           />
         </div>
 

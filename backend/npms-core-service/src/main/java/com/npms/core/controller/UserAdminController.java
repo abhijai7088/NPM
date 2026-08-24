@@ -45,7 +45,7 @@ public class UserAdminController {
                        au.designation,
                        au.created_by,
                        au.managed_by,
-                       COALESCE(au.created_at, u.created_at::timestamp) AS created_at,
+                       COALESCE(au.created_at, CURRENT_TIMESTAMP) AS created_at,
                        ROW_NUMBER() OVER (
                            PARTITION BY u.username
                            ORDER BY CASE r.code

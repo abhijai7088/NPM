@@ -34,7 +34,7 @@ public class BillDeskList {
     private String finalPoNo;
 
     @Column(name = "bill_month")
-    private BigDecimal billMonth;
+    private String billMonth;
 
     @Column(name = "vendor_id")
     private Long vendorId;
@@ -43,7 +43,7 @@ public class BillDeskList {
     private String vendorName;
 
     @Column(name = "invoice_no")
-    private Long invoiceNo;
+    private String invoiceNo;
 
     @Column(name = "invoice_date")
     private LocalDate invoiceDate;
@@ -52,19 +52,19 @@ public class BillDeskList {
     private LocalDate receivedDate;
 
     @Column(name = "invoice_amount")
-    private Long invoiceAmount;
+    private BigDecimal invoiceAmount;
 
     @Column(name = "invoice_num")
-    private Long invoiceNum;
+    private String invoiceNum;
 
     @Column(name = "invoice_amount_bk")
-    private Long invoiceAmountBk;
+    private BigDecimal invoiceAmountBk;
 
     @Column(name = "amount_paid")
-    private Long amountPaid;
+    private BigDecimal amountPaid;
 
     @Column(name = "invoice_status")
-    private Long invoiceStatus;
+    private String invoiceStatus;
 
     @Column(name = "objection_remarks", columnDefinition = "TEXT")
     private String objectionRemarks;
@@ -85,28 +85,28 @@ public class BillDeskList {
     public void setProjectNo(String projectNo) { this.projectNo = projectNo; }
     public String getFinalPoNo() { return finalPoNo; }
     public void setFinalPoNo(String finalPoNo) { this.finalPoNo = finalPoNo; }
-    public BigDecimal getBillMonth() { return billMonth; }
-    public void setBillMonth(BigDecimal billMonth) { this.billMonth = billMonth; }
+    public String getBillMonth() { return billMonth; }
+    public void setBillMonth(String billMonth) { this.billMonth = billMonth; }
     public Long getVendorId() { return vendorId; }
     public void setVendorId(Long vendorId) { this.vendorId = vendorId; }
     public String getVendorName() { return vendorName; }
     public void setVendorName(String vendorName) { this.vendorName = vendorName; }
-    public Long getInvoiceNo() { return invoiceNo; }
-    public void setInvoiceNo(Long invoiceNo) { this.invoiceNo = invoiceNo; }
+    public String getInvoiceNo() { return invoiceNo; }
+    public void setInvoiceNo(String invoiceNo) { this.invoiceNo = invoiceNo; }
     public LocalDate getInvoiceDate() { return invoiceDate; }
     public void setInvoiceDate(LocalDate invoiceDate) { this.invoiceDate = invoiceDate; }
     public LocalDate getReceivedDate() { return receivedDate; }
     public void setReceivedDate(LocalDate receivedDate) { this.receivedDate = receivedDate; }
-    public Long getInvoiceAmount() { return invoiceAmount; }
-    public void setInvoiceAmount(Long invoiceAmount) { this.invoiceAmount = invoiceAmount; }
-    public Long getInvoiceNum() { return invoiceNum; }
-    public void setInvoiceNum(Long invoiceNum) { this.invoiceNum = invoiceNum; }
-    public Long getInvoiceAmountBk() { return invoiceAmountBk; }
-    public void setInvoiceAmountBk(Long invoiceAmountBk) { this.invoiceAmountBk = invoiceAmountBk; }
-    public Long getAmountPaid() { return amountPaid; }
-    public void setAmountPaid(Long amountPaid) { this.amountPaid = amountPaid; }
-    public Long getInvoiceStatus() { return invoiceStatus; }
-    public void setInvoiceStatus(Long invoiceStatus) { this.invoiceStatus = invoiceStatus; }
+    public BigDecimal getInvoiceAmount() { return invoiceAmount; }
+    public void setInvoiceAmount(BigDecimal invoiceAmount) { this.invoiceAmount = invoiceAmount; }
+    public String getInvoiceNum() { return invoiceNum; }
+    public void setInvoiceNum(String invoiceNum) { this.invoiceNum = invoiceNum; }
+    public BigDecimal getInvoiceAmountBk() { return invoiceAmountBk; }
+    public void setInvoiceAmountBk(BigDecimal invoiceAmountBk) { this.invoiceAmountBk = invoiceAmountBk; }
+    public BigDecimal getAmountPaid() { return amountPaid; }
+    public void setAmountPaid(BigDecimal amountPaid) { this.amountPaid = amountPaid; }
+    public String getInvoiceStatus() { return invoiceStatus; }
+    public void setInvoiceStatus(String invoiceStatus) { this.invoiceStatus = invoiceStatus; }
     public String getObjectionRemarks() { return objectionRemarks; }
     public void setObjectionRemarks(String objectionRemarks) { this.objectionRemarks = objectionRemarks; }
     public String getStatus() { return status; }

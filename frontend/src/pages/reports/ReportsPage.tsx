@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { formatCurrency, formatCurrencyFull, STATE_MAP } from '../../utils/formatters';
+import { formatCurrency, formatCurrencyFull, STATE_MAP, extractStateCode, getStateName } from '../../utils/formatters';
 import { useAuthStore } from '../../store/authStore';
 import './ReportsPage.css';
 
@@ -44,9 +44,9 @@ export const ReportsPage: React.FC = () => {
     setLoading(true);
 
     Promise.allSettled([
-      axios.get(`/api/v1/projects/advanced-search?page=0&size=1000${scopeParam}`),
-      axios.get(`/api/v1/finance/purchase-orders?page=0&size=1000${scopeParam}`),
-      axios.get(`/api/v1/finance/tax-invoices?page=0&size=1000${scopeParam}`)
+      axios.get(`/api/v1/projects/advanced-search?page=0&size=3000${scopeParam}`),
+      axios.get(`/api/v1/finance/purchase-orders?page=0&size=15000${scopeParam}`),
+      axios.get(`/api/v1/finance/tax-invoices?page=0&size=45000${scopeParam}`)
     ])
       .then(([projRes, poRes, tiRes]) => {
         if (projRes.status === 'fulfilled' && projRes.value.data?.success) {
@@ -58,11 +58,8 @@ export const ReportsPage: React.FC = () => {
             if (effectivePoAmt > 0 && (p.totalAmountPaid || 0) >= effectivePoAmt) status = 'cleared';
             else if ((p.totalAmountPaid || 0) > 0) status = 'partial';
 
-            let sc = p.stateCode || 'NA';
-            if (!p.stateCode && p.projectCode) {
-              const m = p.projectCode.match(/ZO([A-Z]{2})/);
-              if (m) sc = m[1];
-            }
+            const sc = p.stateCode || extractStateCode(p.projectCode);
+            const stateName = getStateName(p.projectCode || sc);
 
             const vendorPending = Math.max(0, effectivePoAmt - (p.totalAmountPaid || 0));
             const vendorUtilPct = effectivePoAmt > 0 ? Math.round(((p.totalAmountPaid || 0) / effectivePoAmt) * 100) : 0;
@@ -71,7 +68,7 @@ export const ReportsPage: React.FC = () => {
               ...p,
               noOfPO: p.noOfPo || 0,
               paymentStatus: status,
-              stateCode: STATE_MAP[sc] || sc,
+              stateCode: stateName,
               effectivePoAmount: effectivePoAmt,
               vendorPendingPayment: vendorPending,
               vendorUtilPct

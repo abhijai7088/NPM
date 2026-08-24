@@ -9,9 +9,8 @@ services:
     ports: ["5433:5432"]
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Schema files (V001-V008) run first, then the seed (V009) — sorted alphabetically by Postgres
-      - ./database/schema:/docker-entrypoint-initdb.d
-      - ./database/seed/V009__seed_master_data.sql:/docker-entrypoint-initdb.d/V009__seed_master_data.sql
+      - ./database/00_create_postgres_role.sql:/docker-entrypoint-initdb.d/00_create_postgres_role.sql
+      - ./database/npms_db_full_dump.sql:/docker-entrypoint-initdb.d/01_npms_db_full_dump.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
       interval: 10s
@@ -74,23 +73,15 @@ services:
 
   auth-service:
     build:
-      context: ./backend/npms-auth-service
+      context: ./backend
+      dockerfile: npms-auth-service/Dockerfile
     image: npms-auth-service:local
     container_name: npms_auth_service
     ports: ["8081:8081"]
-    # Mail settings are read directly from the .env FILE (never from the
-    # calling shell). This is deliberate: set-env.ps1 exports MAIL_HOST=
-    # localhost / MAIL_PORT=1025 for local Mailhog use by core-service, and
-    # if those ever leaked into `environment:` substitution below (which
-    # docker compose resolves from the shell FIRST, then .env), the auth
-    # container would silently try to reach a mail server that doesn't
-    # exist on the Docker network. env_file reads the file's raw contents,
-    # so it can never be shadowed by an exported shell variable.
+    restart: on-failure
     env_file:
       - .env
     environment:
-      # Connect to other containers over the Docker network (service names, internal ports).
-      # These intentionally override the host-oriented values in .env.
       DB_HOST: postgres
       DB_PORT: "5432"
       DB_NAME: ${DB_NAME}
@@ -104,6 +95,39 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+
+  core-service:
+    build:
+      context: ./backend
+      dockerfile: npms-core-service/Dockerfile
+    image: npms-core-service:local
+    container_name: npms_core_service
+    ports: ["8083:8083"]
+    restart: on-failure
+    env_file:
+      - .env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      AUTH_SERVICE_URL: http://auth-service:8081
+    depends_on:
+      postgres:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ./frontend
+    image: npms-frontend:local
+    container_name: npms_frontend
+    ports: ["5195:5195"]
+    depends_on:
+      - core-service
+      - auth-service
 
 volumes:
   postgres_data:

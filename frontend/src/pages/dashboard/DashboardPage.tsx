@@ -6,7 +6,7 @@ import {
   PieChart, Pie, Cell, AreaChart, Area, LineChart, Line,
 } from 'recharts';
 import {
-  formatCurrency, formatCurrencyFull, STATE_MAP,
+  formatCurrency, formatCurrencyFull, STATE_MAP, extractStateCode, getStateName,
 } from '../../utils/formatters';
 import axios from 'axios';
 import { useAuthStore } from '../../store/authStore';
@@ -111,7 +111,9 @@ export const DashboardPage: React.FC = () => {
     const t = setTimeout(() => setReady(true), 80);
 
     // Fetch dynamic ERP data (PM scoped to own projects, MD/SuperAdmin org-wide)
-    axios.get(`/api/v1/projects/advanced-search?page=0&size=200${scopeParam}`)
+    // MD/SuperAdmin use size=3000 to capture all 2216 projects for analytics & carousel
+    const fetchSize = (isMD || isSuperAdmin) ? 3000 : 500;
+    axios.get(`/api/v1/projects/advanced-search?page=0&size=${fetchSize}${scopeParam}`)
       .then(res => {
         if (res.data.success) {
           const projs = res.data.data;
@@ -142,7 +144,7 @@ export const DashboardPage: React.FC = () => {
             totalPOAmount: kpis.totalPo || 0,
             totalPaid: totalPaid,
             totalVendorPending: kpis.totalVendorPending || 0,
-            total: res.data.total || 0,
+            total: kpis.pmdbTotalProjects || res.data.total || 0,
             totalPOs,
             totalBillDeskInvoices: totalBillDesk,
             totalExpInvoices: totalExp,
@@ -212,12 +214,7 @@ export const DashboardPage: React.FC = () => {
 
   const stateData = Object.entries(
     apiProjects.reduce((acc: any, p: any) => {
-      let sc = 'NA';
-      if (p.projectCode) {
-        const match = p.projectCode.match(/ZO([A-Z]{2})/);
-        sc = match ? match[1] : 'NA';
-      }
-      const st = STATE_MAP[sc] ?? sc;
+      const st = getStateName(p.projectCode || p.stateCode);
       acc[st] = (acc[st] || 0) + 1;
       return acc;
     }, {} as Record<string, number>)

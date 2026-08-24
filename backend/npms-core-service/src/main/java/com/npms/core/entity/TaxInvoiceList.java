@@ -43,7 +43,7 @@ public class TaxInvoiceList {
     private String poNo;
 
     @Column(name = "ampono")
-    private BigDecimal ampono;
+    private String ampono;
 
     @Column(name = "user_bill_no")
     private String userBillNo;
@@ -61,10 +61,10 @@ public class TaxInvoiceList {
     private String billingPeriodTo;
 
     @Column(name = "supp_inv_num")
-    private Long suppInvNum;
+    private String suppInvNum;
 
     @Column(name = "totalamount")
-    private Long totalAmount;
+    private BigDecimal totalAmount;
 
     @Column(name = "bill_type")
     private String billType;
@@ -94,8 +94,8 @@ public class TaxInvoiceList {
     public void setProjectNo(String projectNo) { this.projectNo = projectNo; }
     public String getPoNo() { return poNo; }
     public void setPoNo(String poNo) { this.poNo = poNo; }
-    public BigDecimal getAmpono() { return ampono; }
-    public void setAmpono(BigDecimal ampono) { this.ampono = ampono; }
+    public String getAmpono() { return ampono; }
+    public void setAmpono(String ampono) { this.ampono = ampono; }
     public String getUserBillNo() { return userBillNo; }
     public void setUserBillNo(String userBillNo) { this.userBillNo = userBillNo; }
     public LocalDate getBillDate() { return billDate; }
@@ -106,10 +106,10 @@ public class TaxInvoiceList {
     public void setBillingPeriodFrom(String billingPeriodFrom) { this.billingPeriodFrom = billingPeriodFrom; }
     public String getBillingPeriodTo() { return billingPeriodTo; }
     public void setBillingPeriodTo(String billingPeriodTo) { this.billingPeriodTo = billingPeriodTo; }
-    public Long getSuppInvNum() { return suppInvNum; }
-    public void setSuppInvNum(Long suppInvNum) { this.suppInvNum = suppInvNum; }
-    public Long getTotalAmount() { return totalAmount; }
-    public void setTotalAmount(Long totalAmount) { this.totalAmount = totalAmount; }
+    public String getSuppInvNum() { return suppInvNum; }
+    public void setSuppInvNum(String suppInvNum) { this.suppInvNum = suppInvNum; }
+    public BigDecimal getTotalAmount() { return totalAmount; }
+    public void setTotalAmount(BigDecimal totalAmount) { this.totalAmount = totalAmount; }
     public String getBillType() { return billType; }
     public void setBillType(String billType) { this.billType = billType; }
     public String getStateDescription() { return stateDescription; }

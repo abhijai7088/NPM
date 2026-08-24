@@ -43,7 +43,7 @@ export function useAlerts(user: any) {
       ? `&prjMgrId=${user.prjMgrId}`
       : (user.role === 'MD' ? `&managedBy=${encodeURIComponent(user.username || '')}` : '');
 
-    axios.get(`/api/v1/projects/advanced-search?page=0&size=1000${scopeParam}`)
+    axios.get(`/api/v1/projects/advanced-search?page=0&size=3000${scopeParam}`)
       .then(res => {
         if (!res.data.success) return;
         const generated: EAlert[] = [];

@@ -11,6 +11,7 @@
 
 SET search_path = nicsi_erp;
 
+DROP VIEW IF EXISTS app_user CASCADE;
 CREATE TABLE IF NOT EXISTS app_user (
     username      VARCHAR(80) PRIMARY KEY,
     password      VARCHAR(255) NOT NULL,

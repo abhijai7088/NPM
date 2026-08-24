@@ -150,15 +150,15 @@ export const TicketDetailModal: React.FC<Props> = ({ ticketId, onClose, onRefres
           </div>
 
           <div className="tmd-meta-grid">
-            <div className="tmd-meta-item"><label>Created By</label><value>{ticket.createdBy}</value></div>
-            <div className="tmd-meta-item"><label>Assigned To</label><value>{ticket.assignedTo ?? '—'}</value></div>
-            <div className="tmd-meta-item"><label>Stage Ref</label><value>{ticket.stageRef ?? '—'}</value></div>
+            <div className="tmd-meta-item"><label>Created By</label><span className="tmd-value">{ticket.createdBy}</span></div>
+            <div className="tmd-meta-item"><label>Assigned To</label><span className="tmd-value">{ticket.assignedTo ?? '—'}</span></div>
+            <div className="tmd-meta-item"><label>Stage Ref</label><span className="tmd-value">{ticket.stageRef ?? '—'}</span></div>
             {ticket.slaDeadline && (
               <div className="tmd-meta-item">
                 <label>SLA Deadline</label>
-                <value className={ticket.isOverdue ? 'overdue' : ''}>
+                <span className={`tmd-value ${ticket.isOverdue ? 'overdue' : ''}`}>
                   {new Date(ticket.slaDeadline).toLocaleString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}
-                </value>
+                </span>
               </div>
             )}
           </div>

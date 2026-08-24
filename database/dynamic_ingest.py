@@ -151,9 +151,245 @@ def backup_existing_users(conn):
 
 def setup_public_schema(conn, users_to_restore):
     cur = conn.cursor()
-    print("[+] Creating & ensuring core tables in 'public' schema...")
+    print("[+] Creating & ensuring core tables and schemas (public, auth, master, audit, notification)...")
 
     cur.execute("""
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+    CREATE SCHEMA IF NOT EXISTS auth;
+    CREATE SCHEMA IF NOT EXISTS master;
+    CREATE SCHEMA IF NOT EXISTS audit;
+    CREATE SCHEMA IF NOT EXISTS notification;
+
+    -- ── Auth schema tables ──
+    CREATE TABLE IF NOT EXISTS auth.users (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        username VARCHAR(50) UNIQUE NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        full_name VARCHAR(255) NOT NULL,
+        mobile VARCHAR(15),
+        department_id UUID,
+        ministry_id UUID,
+        is_active BOOLEAN DEFAULT true,
+        is_locked BOOLEAN DEFAULT false,
+        failed_login_count INT DEFAULT 0,
+        last_login_at TIMESTAMPTZ,
+        locked_until TIMESTAMPTZ,
+        mfa_enabled BOOLEAN DEFAULT false,
+        mfa_secret VARCHAR(255),
+        requires_password_change BOOLEAN DEFAULT false NOT NULL,
+        is_deleted BOOLEAN DEFAULT false NOT NULL,
+        version BIGINT DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        created_by UUID
+    );
+
+    CREATE TABLE IF NOT EXISTS auth.roles (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        code VARCHAR(50) UNIQUE NOT NULL,
+        name VARCHAR(50) NOT NULL,
+        description TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS auth.permissions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        code VARCHAR(100) UNIQUE NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        description TEXT,
+        module VARCHAR(50) NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS auth.role_permissions (
+        role_id UUID REFERENCES auth.roles(id) ON DELETE CASCADE,
+        permission_id UUID REFERENCES auth.permissions(id) ON DELETE CASCADE,
+        PRIMARY KEY (role_id, permission_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS auth.user_roles (
+        user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+        role_id UUID REFERENCES auth.roles(id) ON DELETE CASCADE,
+        granted_at TIMESTAMPTZ DEFAULT NOW(),
+        granted_by UUID,
+        PRIMARY KEY (user_id, role_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS auth.refresh_tokens (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+        token_hash VARCHAR(255) UNIQUE NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        revoked_at TIMESTAMPTZ,
+        ip_address INET,
+        user_agent TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS auth.password_history (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+        password_hash VARCHAR(255) NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS auth.password_reset_tokens (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+        otp_hash VARCHAR(255) NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        is_used BOOLEAN DEFAULT false,
+        attempts INTEGER DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    -- Seed Auth Roles
+    INSERT INTO auth.roles (code, name, description) VALUES
+    ('SUPER_ADMIN','Super Administrator','Full system access'),
+    ('MD','Managing Director','Organisation-wide project oversight and Project Manager provisioning'),
+    ('PM','Project Manager','Project Manager portfolio access'),
+    ('PMC','Project Monitoring Cell','HQ project governance and SLA oversight'),
+    ('OA','Operational Assistant','Operational assistant for tasks and follow-up'),
+    ('MINISTRY_ADMIN','Ministry Administrator','Full ministry access'),
+    ('PROJECT_OFFICER','Project Officer','Project management'),
+    ('FINANCE_OFFICER','Finance Officer','Financial operations'),
+    ('AUDITOR','Auditor','Read-only audit access'),
+    ('VIEWER','Viewer','Read-only dashboard')
+    ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description;
+
+    -- Seed Auth Permissions
+    INSERT INTO auth.permissions (code, name, module) VALUES
+    ('USER_MANAGE','Manage users','ADMIN'),
+    ('ROLE_MANAGE','Manage roles','ADMIN'),
+    ('MASTER_MANAGE','Manage master data','MASTER'),
+    ('PROJECT_CREATE','Create projects','PROJECT'),
+    ('PROJECT_VIEW','View projects','PROJECT'),
+    ('PROJECT_APPROVE','Approve projects','PROJECT'),
+    ('PO_CREATE','Create purchase orders','PO'),
+    ('PO_VIEW','View purchase orders','PO'),
+    ('PO_APPROVE','Approve purchase orders','PO'),
+    ('INVOICE_CREATE','Create invoices','INVOICE'),
+    ('INVOICE_VIEW','View invoices','INVOICE'),
+    ('INVOICE_APPROVE','Approve invoices','INVOICE'),
+    ('PAYMENT_INITIATE','Initiate payments','PAYMENT'),
+    ('AUDIT_VIEW','View audit logs','AUDIT'),
+    ('DASHBOARD_VIEW','View dashboard','DASHBOARD')
+    ON CONFLICT (code) DO NOTHING;
+
+    INSERT INTO auth.role_permissions (role_id, permission_id)
+    SELECT r.id, p.id
+    FROM auth.roles r
+    CROSS JOIN auth.permissions p
+    WHERE r.code = 'SUPER_ADMIN'
+    ON CONFLICT DO NOTHING;
+
+    INSERT INTO auth.role_permissions (role_id, permission_id)
+    SELECT r.id, p.id
+    FROM auth.roles r
+    JOIN auth.permissions p ON p.code IN (
+        'USER_MANAGE', 'MASTER_MANAGE', 'PROJECT_CREATE', 'PROJECT_VIEW', 'PROJECT_APPROVE',
+        'PO_CREATE', 'PO_VIEW', 'PO_APPROVE', 'INVOICE_CREATE', 'INVOICE_VIEW',
+        'INVOICE_APPROVE', 'PAYMENT_INITIATE', 'AUDIT_VIEW', 'DASHBOARD_VIEW'
+    )
+    WHERE r.code IN ('MD', 'PMC')
+    ON CONFLICT DO NOTHING;
+
+    INSERT INTO auth.role_permissions (role_id, permission_id)
+    SELECT r.id, p.id
+    FROM auth.roles r
+    JOIN auth.permissions p ON p.code IN (
+        'PROJECT_CREATE', 'PROJECT_VIEW', 'PO_CREATE', 'PO_VIEW',
+        'INVOICE_CREATE', 'INVOICE_VIEW', 'PAYMENT_INITIATE', 'DASHBOARD_VIEW'
+    )
+    WHERE r.code IN ('PM', 'OA')
+    ON CONFLICT DO NOTHING;
+
+    -- ── Master schema tables ──
+    CREATE TABLE IF NOT EXISTS master.ministries (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        code VARCHAR(20) UNIQUE NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS master.departments (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        ministry_id UUID REFERENCES master.ministries(id),
+        code VARCHAR(20) UNIQUE NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS master.states (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        code VARCHAR(10) UNIQUE NOT NULL,
+        name VARCHAR(100) NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS master.districts (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        state_id UUID REFERENCES master.states(id),
+        code VARCHAR(10) NOT NULL,
+        name VARCHAR(100) NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS master.project_categories (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        code VARCHAR(20) UNIQUE NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        description TEXT,
+        is_active BOOLEAN DEFAULT true
+    );
+    CREATE TABLE IF NOT EXISTS master.financial_codes (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        code VARCHAR(20) UNIQUE NOT NULL,
+        description VARCHAR(255) NOT NULL,
+        is_active BOOLEAN DEFAULT true
+    );
+
+    -- ── Audit tables ──
+    CREATE TABLE IF NOT EXISTS audit.audit_logs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        correlation_id UUID,
+        user_id UUID,
+        username VARCHAR(50),
+        action VARCHAR(100) NOT NULL,
+        entity_type VARCHAR(100),
+        entity_id UUID,
+        old_value JSONB,
+        new_value JSONB,
+        ip_address INET,
+        user_agent TEXT,
+        status VARCHAR(20) NOT NULL DEFAULT 'SUCCESS',
+        error_message TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    -- ── Notification tables ──
+    CREATE TABLE IF NOT EXISTS notification.notifications (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID,
+        type VARCHAR(100),
+        title VARCHAR(500),
+        message TEXT,
+        is_read BOOLEAN DEFAULT false,
+        read_at TIMESTAMPTZ,
+        entity_type VARCHAR(100),
+        entity_id UUID,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS notification.email_queue (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        to_email VARCHAR(255) NOT NULL,
+        subject VARCHAR(500) NOT NULL,
+        body TEXT NOT NULL,
+        status VARCHAR(20) DEFAULT 'PENDING',
+        attempts INT DEFAULT 0,
+        sent_at TIMESTAMPTZ,
+        error_message TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    -- ── Public application tables ──
     CREATE TABLE IF NOT EXISTS public.app_user (
         id BIGSERIAL PRIMARY KEY,
         username VARCHAR(100) UNIQUE NOT NULL,
@@ -195,6 +431,72 @@ def setup_public_schema(conn, users_to_restore):
         details TEXT,
         ip_address VARCHAR(50),
         timestamp TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- ── Workflow & Governance tables ──
+    CREATE TABLE IF NOT EXISTS public.project_lifecycle (
+        id                   BIGSERIAL PRIMARY KEY,
+        header_id            BIGINT NOT NULL UNIQUE,
+        current_stage        VARCHAR(30) NOT NULL DEFAULT 'DRAFT',
+        assigned_pm_id       BIGINT,
+        assigned_oa_username VARCHAR(50),
+        sla_deadline         TIMESTAMPTZ,
+        hold_reason          TEXT,
+        notes                TEXT,
+        created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS public.lifecycle_transition (
+        id              BIGSERIAL PRIMARY KEY,
+        header_id       BIGINT NOT NULL,
+        from_stage      VARCHAR(30),
+        to_stage        VARCHAR(30) NOT NULL,
+        performed_by    VARCHAR(50) NOT NULL,
+        acting_as       VARCHAR(50),
+        remarks         TEXT NOT NULL,
+        evidence_url    TEXT,
+        transition_type VARCHAR(20) NOT NULL DEFAULT 'FORWARD',
+        transitioned_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE SEQUENCE IF NOT EXISTS public.ticket_code_seq START 1;
+
+    CREATE TABLE IF NOT EXISTS public.project_ticket (
+        id                  BIGSERIAL PRIMARY KEY,
+        header_id           BIGINT NOT NULL,
+        ticket_code         VARCHAR(30) NOT NULL UNIQUE
+                            DEFAULT ('TKT-' || TO_CHAR(NOW(), 'YYYY') || '-' || LPAD(NEXTVAL('public.ticket_code_seq')::TEXT, 6, '0')),
+        title               VARCHAR(500) NOT NULL,
+        description         TEXT,
+        ticket_type         VARCHAR(40) NOT NULL DEFAULT 'GENERAL',
+        priority            VARCHAR(10) NOT NULL DEFAULT 'MEDIUM',
+        status              VARCHAR(20) NOT NULL DEFAULT 'OPEN',
+        created_by          VARCHAR(50) NOT NULL,
+        assigned_to         VARCHAR(50),
+        reviewed_by         VARCHAR(50),
+        escalated_to        VARCHAR(50),
+        sla_hours           INT NOT NULL DEFAULT 48,
+        sla_deadline        TIMESTAMPTZ,
+        resolved_at         TIMESTAMPTZ,
+        closed_at           TIMESTAMPTZ,
+        reopen_reason       TEXT,
+        stage_ref           VARCHAR(30),
+        created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS public.ticket_event (
+        id              BIGSERIAL PRIMARY KEY,
+        ticket_id       BIGINT NOT NULL REFERENCES public.project_ticket(id) ON DELETE CASCADE,
+        event_type      VARCHAR(30) NOT NULL,
+        from_status     VARCHAR(20),
+        to_status       VARCHAR(20),
+        performed_by    VARCHAR(50) NOT NULL,
+        acting_as       VARCHAR(50),
+        remarks         TEXT,
+        evidence_url    TEXT,
+        event_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
     CREATE TABLE IF NOT EXISTS public.xx_nic_pm_bill_dsk_list (
@@ -330,12 +632,23 @@ def setup_public_schema(conn, users_to_restore):
             all_users[u['username']] = u
 
     print(f"[+] Restoring {len(all_users)} user accounts into public.app_user and auth.users...")
-    cur.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto;")
+    seen_emails = {}
     for u in all_users.values():
         username = u.get('username')
-        pwd_hash = u.get('password', '$2a$10$e0MYzXyjpJS7Pd0RVvHwHeFz8N7N0wFpM7gV/8W9m1B4JqK4x2K.S')
+        raw_pwd = u.get('password', 'Abhi1234#')
+        # If password is raw, let's keep bcrypt hash
+        if raw_pwd.startswith('$2'):
+            pwd_hash = raw_pwd
+        else:
+            cur.execute("SELECT crypt(%s, gen_salt('bf', 12));", (raw_pwd,))
+            pwd_hash = cur.fetchone()[0]
+
         full_name = u.get('full_name', username)
-        email = u.get('email')
+        email = u.get('email') or f"{username}@nicsi.gov.in"
+        if email in seen_emails and seen_emails[email] != username:
+            email = f"{username}@nicsi.gov.in"
+        seen_emails[email] = username
+
         role = u.get('role', 'PM')
         prj_mgr_id = u.get('prj_mgr_id')
         managed_by = u.get('managed_by')
@@ -355,22 +668,30 @@ def setup_public_schema(conn, users_to_restore):
             managed_by = EXCLUDED.managed_by;
         """, (username, pwd_hash, full_name, email, role, prj_mgr_id, managed_by, zone, designation))
 
-        # Check if auth.users exists
-        cur.execute("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='auth' AND table_name='users');")
-        if cur.fetchone()[0]:
-            cur.execute("""
-            INSERT INTO auth.users (id, username, email, password_hash, full_name, is_active, is_locked, failed_login_count, mfa_enabled, requires_password_change, is_deleted, version)
-            VALUES (gen_random_uuid(), %s, %s, %s, %s, TRUE, FALSE, 0, FALSE, FALSE, FALSE, 1)
-            ON CONFLICT (username) DO UPDATE SET
-                password_hash = EXCLUDED.password_hash,
-                email = EXCLUDED.email,
-                full_name = EXCLUDED.full_name,
-                is_active = TRUE,
-                is_locked = FALSE,
-                failed_login_count = 0,
-                mfa_enabled = FALSE,
-                requires_password_change = FALSE;
-            """, (username, email, pwd_hash, full_name))
+        # Insert/Sync to auth.users
+        cur.execute("""
+        INSERT INTO auth.users (id, username, email, password_hash, full_name, is_active, is_locked, failed_login_count, mfa_enabled, requires_password_change, is_deleted, version)
+        VALUES (gen_random_uuid(), %s, %s, %s, %s, TRUE, FALSE, 0, FALSE, FALSE, FALSE, 1)
+        ON CONFLICT (username) DO UPDATE SET
+            password_hash = EXCLUDED.password_hash,
+            email = EXCLUDED.email,
+            full_name = EXCLUDED.full_name,
+            is_active = TRUE,
+            is_locked = FALSE,
+            failed_login_count = 0,
+            mfa_enabled = FALSE,
+            requires_password_change = FALSE;
+        """, (username, email, pwd_hash, full_name))
+
+        # Ensure role assignment in auth.user_roles
+        cur.execute("""
+        INSERT INTO auth.user_roles (user_id, role_id)
+        SELECT u.id, r.id
+        FROM auth.users u
+        CROSS JOIN auth.roles r
+        WHERE u.username = %s AND r.code = %s
+        ON CONFLICT DO NOTHING;
+        """, (username, role))
     conn.commit()
 
 def ingest_sql_file(conn, sql_path):
@@ -604,6 +925,25 @@ def cleanup_old_schemas(conn):
     cur = conn.cursor()
     print("[+] Creating compatibility views in 'nicsi_erp' schema pointing to 'public'...")
     cur.execute("CREATE SCHEMA IF NOT EXISTS nicsi_erp;")
+    cur.execute("""
+    DO $$
+    DECLARE
+        r RECORD;
+    BEGIN
+        FOR r IN (
+            SELECT relname, relkind 
+            FROM pg_class c 
+            JOIN pg_namespace n ON n.oid = c.relnamespace 
+            WHERE n.nspname = 'nicsi_erp'
+        ) LOOP
+            IF r.relkind = 'v' THEN
+                EXECUTE 'DROP VIEW IF EXISTS nicsi_erp.' || quote_ident(r.relname) || ' CASCADE';
+            ELSIF r.relkind = 'r' THEN
+                EXECUTE 'DROP TABLE IF EXISTS nicsi_erp.' || quote_ident(r.relname) || ' CASCADE';
+            END IF;
+        END LOOP;
+    END $$;
+    """)
     cur.execute("CREATE OR REPLACE VIEW nicsi_erp.app_user AS SELECT * FROM public.app_user;")
     cur.execute("CREATE OR REPLACE VIEW nicsi_erp.project_manager AS SELECT * FROM public.project_manager;")
     cur.execute("CREATE OR REPLACE VIEW nicsi_erp.project_list AS SELECT * FROM public.project_list;")

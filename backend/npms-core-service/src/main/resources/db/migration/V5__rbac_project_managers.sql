@@ -12,6 +12,7 @@
 SET search_path = nicsi_erp;
 
 -- ── Project Manager master table ──────────────────────────────
+DROP VIEW IF EXISTS project_manager CASCADE;
 CREATE TABLE IF NOT EXISTS project_manager (
     prj_mgr_id   BIGINT PRIMARY KEY,
     full_name    TEXT NOT NULL,

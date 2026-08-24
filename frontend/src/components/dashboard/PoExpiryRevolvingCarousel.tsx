@@ -9,6 +9,7 @@ interface ProjectAlert {
   customerName?: string;
   poAmount?: number;
   expiryStatus: 'EXPIRED' | 'EXPIRING_SOON' | string;
+  prjMgrName?: string;
   [key: string]: any;
 }
 
@@ -16,12 +17,18 @@ interface PoExpiryRevolvingCarouselProps {
   projects: ProjectAlert[];
   title?: string;
   subtitle?: string;
+  showPmName?: boolean;
+  totalExpiredCount?: number;
+  totalExpiringSoonCount?: number;
 }
 
 export const PoExpiryRevolvingCarousel: React.FC<PoExpiryRevolvingCarouselProps> = ({
   projects,
   title = "PO Expiry Live Alerts",
-  subtitle = "Layman summary of projects with expired or near-expiry Purchase Orders"
+  subtitle = "Layman summary of projects with expired or near-expiry Purchase Orders",
+  showPmName = false,
+  totalExpiredCount,
+  totalExpiringSoonCount
 }) => {
   const navigate = useNavigate();
   const carouselRef = useRef<HTMLDivElement>(null);
@@ -39,7 +46,25 @@ export const PoExpiryRevolvingCarousel: React.FC<PoExpiryRevolvingCarouselProps>
     filteredProjects = expiringSoonList;
   }
 
-  const totalAlerts = expiredList.length + expiringSoonList.length;
+  const expCountDisplay = totalExpiredCount !== undefined ? totalExpiredCount : expiredList.length;
+  const expSoonCountDisplay = totalExpiringSoonCount !== undefined ? totalExpiringSoonCount : expiringSoonList.length;
+  const totalAlertsDisplay = expCountDisplay + expSoonCountDisplay;
+
+  const handleFilterClick = (targetFilter: 'ALL' | 'EXPIRED' | 'EXPIRING_SOON') => {
+    if (filter === targetFilter) {
+      // Direct navigation to dedicated alerts page when clicking active filter pill again
+      navigate(`/po-expiry-alerts?status=${targetFilter}`);
+    } else {
+      setFilter(targetFilter);
+      if (carouselRef.current) {
+        carouselRef.current.scrollTo({ left: 0, behavior: 'smooth' });
+      }
+    }
+  };
+
+  const handleViewAllInRegistry = () => {
+    navigate(`/po-expiry-alerts?status=${filter}`);
+  };
 
   // Continuous Auto-Revolve Effect
   useEffect(() => {
@@ -71,7 +96,7 @@ export const PoExpiryRevolvingCarousel: React.FC<PoExpiryRevolvingCarouselProps>
     }
   };
 
-  if (totalAlerts === 0) return null;
+  if (projects.length === 0 && totalAlertsDisplay === 0) return null;
 
   return (
     <div 
@@ -79,8 +104,8 @@ export const PoExpiryRevolvingCarousel: React.FC<PoExpiryRevolvingCarouselProps>
       style={{ 
         borderLeft: '4px solid #dc3545', 
         background: 'linear-gradient(135deg, #ffffff 0%, #fff6f6 100%)', 
-        padding: '1rem 1.25rem', 
-        marginBottom: '1rem',
+        padding: '0.65rem 1rem', 
+        marginBottom: '0.65rem',
         boxShadow: '0 4px 14px rgba(220, 53, 69, 0.08)',
         borderRadius: '12px'
       }}
@@ -88,7 +113,7 @@ export const PoExpiryRevolvingCarousel: React.FC<PoExpiryRevolvingCarouselProps>
       onMouseLeave={() => setIsPaused(false)}
     >
       {/* ── Carousel Header & Action Bar ── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.85rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
           <span style={{ 
             display: 'flex', 
@@ -108,7 +133,7 @@ export const PoExpiryRevolvingCarousel: React.FC<PoExpiryRevolvingCarouselProps>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#003366' }}>
-                {title} ({totalAlerts} Projects Require Immediate Attention)
+                {title} ({totalAlertsDisplay.toLocaleString('en-IN')} Projects Require Immediate Attention)
               </h4>
               <span style={{ 
                 background: isPaused ? '#6c757d20' : '#28a74520', 
@@ -131,10 +156,11 @@ export const PoExpiryRevolvingCarousel: React.FC<PoExpiryRevolvingCarouselProps>
           </div>
         </div>
 
-        {/* ── Filter Pills & Carousel Controls ── */}
+        {/* ── Filter Pills, Direct Registry Action & Carousel Controls ── */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
           <button
-            onClick={() => setFilter('ALL')}
+            onClick={() => handleFilterClick('ALL')}
+            title="Filter revolving list. Click active pill to open all in Registry."
             style={{
               background: filter === 'ALL' ? '#003366' : '#e9ecef',
               color: filter === 'ALL' ? '#ffffff' : '#495057',
@@ -147,11 +173,12 @@ export const PoExpiryRevolvingCarousel: React.FC<PoExpiryRevolvingCarouselProps>
               transition: 'all 0.2s'
             }}
           >
-            All Alerts ({totalAlerts})
+            All Alerts ({totalAlertsDisplay.toLocaleString('en-IN')})
           </button>
           
           <button
-            onClick={() => setFilter('EXPIRED')}
+            onClick={() => handleFilterClick('EXPIRED')}
+            title="Filter revolving list to Expired. Click active pill to open all in Registry."
             style={{
               background: filter === 'EXPIRED' ? '#dc3545' : '#dc354518',
               color: filter === 'EXPIRED' ? '#ffffff' : '#dc3545',
@@ -164,11 +191,12 @@ export const PoExpiryRevolvingCarousel: React.FC<PoExpiryRevolvingCarouselProps>
               transition: 'all 0.2s'
             }}
           >
-            🔴 {expiredList.length} Expired
+            🔴 {expCountDisplay.toLocaleString('en-IN')} Expired
           </button>
 
           <button
-            onClick={() => setFilter('EXPIRING_SOON')}
+            onClick={() => handleFilterClick('EXPIRING_SOON')}
+            title="Filter revolving list to Expiring Soon. Click active pill to open all in Registry."
             style={{
               background: filter === 'EXPIRING_SOON' ? '#ffc107' : '#ffc10725',
               color: filter === 'EXPIRING_SOON' ? '#000000' : '#b58500',
@@ -181,7 +209,34 @@ export const PoExpiryRevolvingCarousel: React.FC<PoExpiryRevolvingCarouselProps>
               transition: 'all 0.2s'
             }}
           >
-            🟡 {expiringSoonList.length} Expiring Soon
+            🟡 {expSoonCountDisplay.toLocaleString('en-IN')} Expiring Soon
+          </button>
+
+          {/* ── Direct Full Registry Navigation Button ── */}
+          <button
+            onClick={handleViewAllInRegistry}
+            style={{
+              background: 'linear-gradient(135deg, #003366 0%, #004b87 100%)',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: 20,
+              padding: '5px 14px',
+              fontSize: '0.75rem',
+              fontWeight: 800,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              boxShadow: '0 2px 6px rgba(0, 51, 102, 0.25)',
+              transition: 'all 0.2s ease',
+              marginLeft: '0.2rem'
+            }}
+            title="Open complete Projects Registry filtered by selected status"
+          >
+            <span>
+              Open All {filter === 'EXPIRED' ? `${expCountDisplay.toLocaleString('en-IN')} Expired` : filter === 'EXPIRING_SOON' ? `${expSoonCountDisplay.toLocaleString('en-IN')} Expiring Soon` : `${totalAlertsDisplay.toLocaleString('en-IN')} Alerts`} in Registry
+            </span>
+            <span style={{ fontSize: '0.85rem' }}>→</span>
           </button>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: '0.4rem' }}>
@@ -285,10 +340,23 @@ export const PoExpiryRevolvingCarousel: React.FC<PoExpiryRevolvingCarouselProps>
                 whiteSpace: 'nowrap', 
                 overflow: 'hidden', 
                 textOverflow: 'ellipsis',
-                marginBottom: 6
+                marginBottom: showPmName && p.prjMgrName ? 3 : 6
               }}>
                 {p.customerName || p.projectName || 'Project ' + p.projectCode}
               </div>
+
+              {showPmName && p.prjMgrName && (
+                <div style={{ fontSize: '0.72rem', color: '#006699', fontWeight: 600, marginBottom: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#006699', display: 'inline-block' }}></span>
+                  PM: {p.prjMgrName}
+                </div>
+              )}
+
+              {p.poEndDate && (
+                <div style={{ fontSize: '0.71rem', color: isExpired ? '#dc3545' : '#b58500', fontWeight: 600, marginBottom: 3 }}>
+                  ⏱ {isExpired ? 'Expired on: ' : 'Expiring on: '}{new Date(p.poEndDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                </div>
+              )}
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 6, borderTop: '1px solid #f1f3f5', fontSize: '0.75rem', color: '#6c757d' }}>
                 <span>PO: <strong style={{ color: '#006699' }}>{formatCurrency(p.poAmount || 0)}</strong></span>

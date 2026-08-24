@@ -120,29 +120,64 @@ CREATE TABLE IF NOT EXISTS erp_staging.tax_inv_list (
 -- ============================================================
 -- Ensure PM 1626 (Atul Rastogi) profile is correct
 -- ============================================================
-INSERT INTO nicsi_erp.project_manager (prj_mgr_id, full_name, designation, zone, email, mobile, is_active)
-VALUES (1626, 'Atul Rastogi', 'Senior Project Manager', 'North Zone', 'atul.rastogi@nicsi.com', '9810012601', TRUE)
-ON CONFLICT (prj_mgr_id) DO UPDATE
-SET full_name   = 'Atul Rastogi',
-    designation = 'Senior Project Manager',
-    zone        = 'North Zone',
-    email       = 'atul.rastogi@nicsi.com',
-    mobile      = '9810012601',
-    is_active   = TRUE;
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM pg_tables WHERE schemaname = 'nicsi_erp' AND tablename = 'project_manager'
+    ) THEN
+        INSERT INTO nicsi_erp.project_manager (prj_mgr_id, full_name, designation, zone, email, mobile, is_active)
+        VALUES (1626, 'Atul Rastogi', 'Senior Project Manager', 'North Zone', 'atul.rastogi@nicsi.com', '9810012601', TRUE)
+        ON CONFLICT (prj_mgr_id) DO UPDATE
+        SET full_name   = 'Atul Rastogi',
+            designation = 'Senior Project Manager',
+            zone        = 'North Zone',
+            email       = 'atul.rastogi@nicsi.com',
+            mobile      = '9810012601',
+            is_active   = TRUE;
+    END IF;
 
--- ============================================================
--- Seed MD login (md1 / admin123) and PM login (pm1 / admin123)
--- These are convenience aliases for testing without OTP
--- ============================================================
-INSERT INTO nicsi_erp.app_user (username, password, full_name, email, role, created_by, is_active, managed_by)
-VALUES ('md1', 'admin123', 'Alok Tiwari (MD)', 'md1@nicsi.gov.in', 'MD', 'superadmin', TRUE, NULL)
-ON CONFLICT (username) DO UPDATE
-SET password = 'admin123', is_active = TRUE, email = EXCLUDED.email;
+    IF EXISTS (
+        SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'project_manager'
+    ) THEN
+        INSERT INTO public.project_manager (prj_mgr_id, full_name, designation, zone, email, mobile, is_active)
+        VALUES (1626, 'Atul Rastogi', 'Senior Project Manager', 'North Zone', 'atul.rastogi@nicsi.com', '9810012601', TRUE)
+        ON CONFLICT (prj_mgr_id) DO UPDATE
+        SET full_name   = 'Atul Rastogi',
+            designation = 'Senior Project Manager',
+            zone        = 'North Zone',
+            email       = 'atul.rastogi@nicsi.com',
+            mobile      = '9810012601',
+            is_active   = TRUE;
+    END IF;
 
-INSERT INTO nicsi_erp.app_user (username, password, full_name, email, role, prj_mgr_id, created_by, is_active, managed_by)
-VALUES ('pm1', 'admin123', 'Atul Rastogi (PM)', 'pm1@nicsi.gov.in', 'PM', 1627, 'md1', TRUE, 'md1')
-ON CONFLICT (username) DO UPDATE
-SET password = 'admin123', prj_mgr_id = 1627, is_active = TRUE, email = EXCLUDED.email;
+    IF EXISTS (
+        SELECT 1 FROM pg_tables WHERE schemaname = 'nicsi_erp' AND tablename = 'app_user'
+    ) THEN
+        INSERT INTO nicsi_erp.app_user (username, password, full_name, email, role, created_by, is_active, managed_by)
+        VALUES ('md1', 'admin123', 'Alok Tiwari (MD)', 'md1@nicsi.gov.in', 'MD', 'superadmin', TRUE, NULL)
+        ON CONFLICT (username) DO UPDATE
+        SET password = 'admin123', is_active = TRUE, email = EXCLUDED.email;
+
+        INSERT INTO nicsi_erp.app_user (username, password, full_name, email, role, prj_mgr_id, created_by, is_active, managed_by)
+        VALUES ('pm1', 'admin123', 'Atul Rastogi (PM)', 'pm1@nicsi.gov.in', 'PM', 1627, 'md1', TRUE, 'md1')
+        ON CONFLICT (username) DO UPDATE
+        SET password = 'admin123', prj_mgr_id = 1627, is_active = TRUE, email = EXCLUDED.email;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'app_user'
+    ) THEN
+        INSERT INTO public.app_user (username, password, full_name, email, role, created_by, is_active, managed_by)
+        VALUES ('md1', 'admin123', 'Alok Tiwari (MD)', 'md1@nicsi.gov.in', 'MD', 'superadmin', TRUE, NULL)
+        ON CONFLICT (username) DO UPDATE
+        SET password = 'admin123', is_active = TRUE, email = EXCLUDED.email;
+
+        INSERT INTO public.app_user (username, password, full_name, email, role, prj_mgr_id, created_by, is_active, managed_by)
+        VALUES ('pm1', 'admin123', 'Atul Rastogi (PM)', 'pm1@nicsi.gov.in', 'PM', 1627, 'md1', TRUE, 'md1')
+        ON CONFLICT (username) DO UPDATE
+        SET password = 'admin123', prj_mgr_id = 1627, is_active = TRUE, email = EXCLUDED.email;
+    END IF;
+END $$;
 
 -- Sync md1 and pm1 to auth.users (no MFA, no password change required — for testing)
 INSERT INTO auth.users (id, username, email, password_hash, full_name, is_active, is_locked,
@@ -150,7 +185,7 @@ INSERT INTO auth.users (id, username, email, password_hash, full_name, is_active
 SELECT gen_random_uuid(), a.username, lower(a.email),
     crypt(a.password, gen_salt('bf', 12)),
     a.full_name, TRUE, FALSE, 0, FALSE, FALSE, FALSE, 0
-FROM nicsi_erp.app_user a
+FROM public.app_user a
 WHERE a.username IN ('md1', 'pm1')
 ON CONFLICT (username) DO UPDATE
 SET email = EXCLUDED.email,
@@ -163,7 +198,7 @@ SET email = EXCLUDED.email,
 INSERT INTO auth.user_roles (user_id, role_id)
 SELECT u.id, r.id
 FROM auth.users u
-JOIN nicsi_erp.app_user a ON a.username = u.username
+JOIN public.app_user a ON a.username = u.username
 JOIN auth.roles r ON r.code = a.role
 WHERE a.username IN ('md1', 'pm1')
 ON CONFLICT DO NOTHING;

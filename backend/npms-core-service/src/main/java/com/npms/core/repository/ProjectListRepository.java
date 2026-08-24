@@ -25,10 +25,11 @@ public interface ProjectListRepository extends JpaRepository<ProjectList, Long>,
                    COALESCE(SUM(p.total_amount_paid), 0) AS totalPaid,
                    COALESCE(SUM(p.project_abp), 0) AS totalAbp,
                    COALESCE(SUM(GREATEST(COALESCE(p.po_amount,0) - COALESCE(p.total_amount_paid,0), 0)), 0) AS totalVendorPending
-            FROM nicsi_erp.project_list p
+            FROM public.project_list p
             GROUP BY p.prj_mgr_id
             """, nativeQuery = true)
     List<Object[]> aggregatePortfolioByManager();
 
-
+    @Query(value = "SELECT COALESCE(SUM(noofproject), 0) FROM public.xx_nic_pmdb_project_list", nativeQuery = true)
+    Long countTotalOrgProjects();
 }

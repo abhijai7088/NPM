@@ -5,9 +5,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 
 import axios from 'axios';
-import { formatCurrency, formatCurrencyFull, STATE_MAP, computeGst } from '../../utils/formatters';
+import { formatCurrency, formatCurrencyFull, STATE_MAP, computeGst, extractStateCode, getStateName } from '../../utils/formatters';
 import { AdvancedFilters } from '../../components/dashboard/AdvancedFilters';
 import type { AdvancedFilterState } from '../../components/dashboard/AdvancedFilters';
+import { UnassignedProjectsSection } from '../../components/projects/UnassignedProjectsSection';
 import { useAuthStore } from '../../store/authStore';
 import './ProjectListPage.css';
 
@@ -96,9 +97,11 @@ interface ProjectListPageProps {
   forcedPrjMgrId?: number | null;
   onBackToRoster?: () => void;
   pmInfo?: any;
+  forcedProjectType?: string | null;
+  backLabel?: string;
 }
 
-export const ProjectListPage: React.FC<ProjectListPageProps> = ({ forcedPrjMgrId, onBackToRoster, pmInfo }) => {
+export const ProjectListPage: React.FC<ProjectListPageProps> = ({ forcedPrjMgrId, onBackToRoster, pmInfo, forcedProjectType, backLabel }) => {
   const { user } = useAuthStore();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -148,6 +151,7 @@ export const ProjectListPage: React.FC<ProjectListPageProps> = ({ forcedPrjMgrId
       vendorBillNotSubmitted: searchParams.get('vendorBillNotSubmitted') === 'true',
       projectManager: searchParams.get('projectManager') || '',
       state: searchParams.get('state') || '',
+      projectType: searchParams.get('projectType') || searchParams.get('projectCategory') || '',
       expiryStatus: urlExpiry,
       expiryDays: searchParams.get('expiryDays') || '',
       nicsiHoldLessThan20: searchParams.get('nicsiHoldLessThan20') === 'true',
@@ -218,6 +222,89 @@ export const ProjectListPage: React.FC<ProjectListPageProps> = ({ forcedPrjMgrId
     minAmount: '',
     maxAmount: '',
   });
+
+  // PM Reassignment Modal for MD / Super Admin
+  const [assignModal, setAssignModal] = useState<{
+    open: boolean;
+    project: ProjectDto | null;
+    selectedPmId: string;
+    remarks: string;
+    loading: boolean;
+    msg: { text: string; type: 'success' | 'error' } | null;
+  }>({
+    open: false,
+    project: null,
+    selectedPmId: '',
+    remarks: '',
+    loading: false,
+    msg: null,
+  });
+  const [pmRoster, setPmRoster] = useState<any[]>([]);
+  const [pmRosterLoading, setPmRosterLoading] = useState(false);
+
+  const openAssignModal = (proj: ProjectDto) => {
+    setAssignModal({
+      open: true,
+      project: proj,
+      selectedPmId: proj.prjMgrId ? String(proj.prjMgrId) : '',
+      remarks: '',
+      loading: false,
+      msg: null,
+    });
+    if (pmRoster.length === 0) {
+      setPmRosterLoading(true);
+      axios.get('/api/v1/project-managers')
+        .then(res => {
+          if (res.data?.success) setPmRoster(res.data.data ?? []);
+        })
+        .catch(() => {})
+        .finally(() => setPmRosterLoading(false));
+    }
+  };
+
+  const handleAssignSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!assignModal.project) return;
+    setAssignModal(prev => ({ ...prev, loading: true, msg: null }));
+    try {
+      const res = await axios.put(`/api/v1/projects/${assignModal.project.headerId}/assign`, {
+        newPrjMgrId: assignModal.selectedPmId || null,
+        remarks: assignModal.remarks || 'Assigned via Project Registry Management',
+      }, { withCredentials: true });
+
+      if (res.data?.success) {
+        setAssignModal(prev => ({
+          ...prev,
+          loading: false,
+          msg: { text: res.data.message || 'Project successfully assigned!', type: 'success' },
+        }));
+        const updatedPmId = assignModal.selectedPmId ? Number(assignModal.selectedPmId) : undefined;
+        const matchedPm = pmRoster.find(pm => String(pm.prjMgrId) === assignModal.selectedPmId);
+        const updatedName = matchedPm ? matchedPm.fullName : undefined;
+
+        setProjects(prev => prev.map(p => p.headerId === assignModal.project?.headerId ? { ...p, prjMgrId: updatedPmId, prjMgrName: updatedName } as any : p));
+        if (selected && selected.headerId === assignModal.project.headerId) {
+          setSelected(prev => prev ? ({ ...prev, prjMgrId: updatedPmId, prjMgrName: updatedName } as any) : null);
+        }
+
+        setTimeout(() => {
+          setAssignModal(prev => ({ ...prev, open: false, msg: null }));
+        }, 1200);
+      } else {
+        setAssignModal(prev => ({
+          ...prev,
+          loading: false,
+          msg: { text: res.data?.message || 'Assignment failed.', type: 'error' },
+        }));
+      }
+    } catch (err: any) {
+      setAssignModal(prev => ({
+        ...prev,
+        loading: false,
+        msg: { text: err?.response?.data?.message || 'Failed to reassign project.', type: 'error' },
+      }));
+    }
+  };
 
   // Filtered Purchase Orders (Safely string-converted & date filtered)
   const filteredPos = useMemo(() => {
@@ -436,6 +523,7 @@ export const ProjectListPage: React.FC<ProjectListPageProps> = ({ forcedPrjMgrId
       if (filters.vendorBillNotSubmitted) params.vendorBillNotSubmitted = true;
       if (filters.projectManager) params.projectManager = filters.projectManager;
       if (filters.state) params.state = filters.state;
+      if (filters.projectType && filters.projectType !== '__ALL__') params.projectCategory = filters.projectType;
       if (filters.expiryStatus) params.expiryStatus = filters.expiryStatus;
       if (filters.expiryDays) params.expiryDays = filters.expiryDays;
       if (filters.nicsiHoldLessThan20) params.nicsiHoldLessThan20 = true;
@@ -443,6 +531,8 @@ export const ProjectListPage: React.FC<ProjectListPageProps> = ({ forcedPrjMgrId
       if (filters.hasExpBills) params.hasExpBills = true;
       if (filters.hasPOs) params.hasPOs = true;
       if (filters.hasInvoiced) params.hasInvoiced = true;
+      // When drilling into a specific project category via props
+      if (forcedProjectType && forcedProjectType !== '__ALL__') params.projectCategory = forcedProjectType;
 
       setLoadError(null);
       const res = await axios.get('/api/v1/projects/advanced-search', { params });
@@ -474,6 +564,7 @@ export const ProjectListPage: React.FC<ProjectListPageProps> = ({ forcedPrjMgrId
     const urlExpiry = searchParams.get('expiryStatus');
     const urlStatus = searchParams.get('status') || searchParams.get('financialStatus');
     const urlFilter = searchParams.get('filter');
+    const urlCategory = searchParams.get('projectType') || searchParams.get('projectCategory');
     const urlHasVendorBilled = searchParams.get('hasVendorBilled') === 'true' || urlFilter === 'hasVendorBilled' || urlFilter === 'billDesk';
     const urlHasExpBills = searchParams.get('hasExpBills') === 'true' || urlFilter === 'hasExpBills' || urlFilter === 'expBills';
     const urlHasPOs = searchParams.get('hasPOs') === 'true' || urlFilter === 'hasPOs' || urlFilter === 'posIssued';
@@ -483,6 +574,7 @@ export const ProjectListPage: React.FC<ProjectListPageProps> = ({ forcedPrjMgrId
       ...prev,
       expiryStatus: urlExpiry !== null ? urlExpiry : prev.expiryStatus,
       financialStatus: urlStatus !== null ? urlStatus : prev.financialStatus,
+      projectType: urlCategory !== null ? urlCategory : prev.projectType,
       hasVendorBilled: urlHasVendorBilled ? true : (urlFilter === null && !searchParams.has('hasVendorBilled') ? false : prev.hasVendorBilled),
       hasExpBills: urlHasExpBills ? true : (urlFilter === null && !searchParams.has('hasExpBills') ? false : prev.hasExpBills),
       hasPOs: urlHasPOs ? true : (urlFilter === null && !searchParams.has('hasPOs') ? false : prev.hasPOs),
@@ -493,7 +585,7 @@ export const ProjectListPage: React.FC<ProjectListPageProps> = ({ forcedPrjMgrId
   useEffect(() => {
     fetchProjects();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, scopedPrjMgrId, filters]); // Refetch on page change or when drilling into a PM.
+  }, [page, scopedPrjMgrId, filters, forcedProjectType]); // Refetch on page change, PM drilldown, or category drilldown.
 
   // Sync selected project with URL searchParam ?id=
   useEffect(() => {
@@ -580,6 +672,7 @@ export const ProjectListPage: React.FC<ProjectListPageProps> = ({ forcedPrjMgrId
       vendorBillNotSubmitted: false,
       projectManager: '',
       state: '',
+      projectType: '',
       expiryStatus: '',
       expiryDays: '',
       nicsiHoldLessThan20: false
@@ -762,11 +855,6 @@ NICSI Project Monitoring System
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = `Project_Details_${p.projectCode}.txt`; a.click();
   };
-  const extractStateCode = (code: string) => {
-    if (!code) return 'NA';
-    const match = code.match(/ZO([A-Z]{2})/);
-    return match ? match[1] : 'NA';
-  };
 
   if (selected) {
     const nicsiRetained = selected.nicsiCommission || 0;
@@ -777,6 +865,7 @@ NICSI Project Monitoring System
     const totalBilling = (selected.totalInvoiceAmount || 0) + (selected.totalTaxInvoiceAmount || 0);
     const totalBillsCount = (selected.noOfExpInvoice || 0) + (selected.noOfTaxInvoice || 0);
     const stateCode = extractStateCode(selected.projectCode);
+    const stateName = getStateName(selected.projectCode);
 
     return (
       <div className="projects-page page-container project-detail-view-page">
@@ -798,6 +887,17 @@ NICSI Project Monitoring System
           </div>
 
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+            {(user?.role === 'MD' || user?.role === 'SUPER_ADMIN') && (
+              <button
+                type="button"
+                className="btn btn-sm"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, background: '#0284c7', color: '#fff', border: 'none', borderRadius: '8px', padding: '0.45rem 0.9rem', cursor: 'pointer' }}
+                onClick={() => openAssignModal(selected)}
+                title="Assign / Reassign Project Manager"
+              >
+                🔄 Reassign PM
+              </button>
+            )}
             <button
               className="btn btn-sm"
               style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, background: 'linear-gradient(135deg, #003366, #1a6bb5)', color: '#fff', border: 'none', borderRadius: '8px', padding: '0.45rem 0.9rem', cursor: 'pointer' }}
@@ -819,12 +919,12 @@ NICSI Project Monitoring System
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
-                <code className="proj-code-cell" style={{ fontSize: '0.85rem', padding: '3px 10px' }}>{selected.projectCode}</code>
+                <code className="proj-code-cell" style={{ fontSize: '0.85rem', padding: '3px 10px', fontWeight: 700 }}>{selected.projectCode}</code>
                 <span className={`badge badge-${selected.financialStatus === 'PROFIT' ? 'success' : selected.financialStatus === 'LOSS' ? 'danger' : 'warning'}`}>
                   {selected.financialStatus}
                 </span>
-                <span className="state-cell" style={{ fontSize: '0.75rem', padding: '3px 10px' }}>
-                  {STATE_MAP[stateCode] || stateCode}
+                <span className="state-cell" style={{ fontSize: '0.75rem', padding: '3px 10px', background: '#00336615', color: '#003366', fontWeight: 700, borderRadius: 4 }}>
+                  {stateName} {stateCode !== 'NA' ? `(${stateCode})` : ''}
                 </span>
               </div>
               <h1 className="project-detail-hero__title">{selected.projectName}</h1>
@@ -836,13 +936,22 @@ NICSI Project Monitoring System
               <strong>Department / Customer:</strong> {selected.customerName}
             </div>
             <div className="project-detail-hero__meta-item">
-              <strong>Sanctioned:</strong> {selected.createdOn}
+              <strong>Project Code:</strong> <code style={{ fontWeight: 800, color: '#003366', background: '#00336610', padding: '2px 8px', borderRadius: 4, letterSpacing: '0.5px' }}>{selected.projectCode}</code>
             </div>
             <div className="project-detail-hero__meta-item">
-              <strong>Budget Head:</strong> #{selected.prjBudgetNo}
+              <strong>State / UT:</strong> <span style={{ fontWeight: 700, color: '#003366' }}>{stateName} {stateCode !== 'NA' ? `(${stateCode})` : ''}</span>
             </div>
             <div className="project-detail-hero__meta-item">
-              <strong>Project Manager:</strong> {(selected as any).prjMgrName || (selected.prjMgrId ? `Atul Rastogi (PM #${selected.prjMgrId})` : 'Atul Rastogi')}
+              <strong>Project Manager:</strong> {(selected as any).prjMgrName || (selected.prjMgrId ? `PM #${selected.prjMgrId}` : 'Unassigned (Corporate Pool)')}
+              {(user?.role === 'MD' || user?.role === 'SUPER_ADMIN') && (
+                <button
+                  type="button"
+                  onClick={() => openAssignModal(selected)}
+                  style={{ marginLeft: 8, background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', borderRadius: 4, padding: '1px 6px', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Change
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -913,129 +1022,6 @@ NICSI Project Monitoring System
                     </div>
                   </div>
                 )}
-
-                <div style={{ marginTop: '1.75rem' }}>
-                  <h4 style={{ margin: '0 0 1rem 0', color: '#003366', fontSize: '0.95rem', fontWeight: 700 }}>Project Stakeholders & Key Contacts</h4>
-                  <div className="contacts-grid">
-                    {/* 1. Client / User Lead */}
-                    <div className="contact-card">
-                      <div className="contact-card__header">
-                        <span className="contact-card__role">Client / User Lead</span>
-                        <span className="contact-card__icon">👤</span>
-                      </div>
-                      <div className="contact-card__name">
-                        {selected.userEmail 
-                          ? `${selected.userEmail.split('@')[0].toUpperCase().replace('.', ' ')} (Client Lead)` 
-                          : 'Client Nodal Officer'}
-                      </div>
-                      <div className="contact-card__dept">
-                        {selected.department || selected.customerName}
-                      </div>
-                      <div className="contact-card__info">
-                        {selected.userEmail ? (
-                          <div className="contact-card__info-item">
-                            <span>✉️</span>
-                            <a href={`mailto:${selected.userEmail}`}>{selected.userEmail}</a>
-                          </div>
-                        ) : (
-                          <div className="contact-card__info-item" style={{ color: '#94a3b8' }}>
-                            <span>✉️</span> Not specified
-                          </div>
-                        )}
-                        <div className="contact-card__info-item">
-                          <span>📞</span> {selected.mobileNumber || '+91-11-2436XXXX (Govt Desk)'}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 2. Head of Department (HOD) */}
-                    <div className="contact-card">
-                      <div className="contact-card__header">
-                        <span className="contact-card__role">Head of Department (HOD)</span>
-                        <span className="contact-card__icon">🏛️</span>
-                      </div>
-                      <div className="contact-card__name">
-                        {selected.hodEmail 
-                          ? `HOD (${selected.hodEmail.split('@')[0].toUpperCase().replace('.', ' ')})` 
-                          : 'Head of Department / Director'}
-                      </div>
-                      <div className="contact-card__dept">
-                        {selected.customerName}
-                      </div>
-                      <div className="contact-card__info">
-                        {selected.hodEmail ? (
-                          <div className="contact-card__info-item">
-                            <span>✉️</span>
-                            <a href={`mailto:${selected.hodEmail}`}>{selected.hodEmail}</a>
-                          </div>
-                        ) : (
-                          <div className="contact-card__info-item" style={{ color: '#94a3b8' }}>
-                            <span>✉️</span> Not specified
-                          </div>
-                        )}
-                        <div className="contact-card__info-item">
-                          <span>📞</span> {selected.hodEmail ? '+91-11-24302000' : '+91-11-2430XXXX'}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 3. NIC Coordinator */}
-                    <div className="contact-card">
-                      <div className="contact-card__header">
-                        <span className="contact-card__role">NIC Coordinator</span>
-                        <span className="contact-card__icon">🌐</span>
-                      </div>
-                      <div className="contact-card__name">
-                        {selected.nicCoordEmail 
-                          ? `NIC Coordinator (${selected.nicCoordEmail.split('@')[0].toUpperCase().replace('.', ' ')})` 
-                          : 'Senior Technical Director (NIC)'}
-                      </div>
-                      <div className="contact-card__dept">
-                        National Informatics Centre (NIC)
-                      </div>
-                      <div className="contact-card__info">
-                        {selected.nicCoordEmail ? (
-                          <div className="contact-card__info-item">
-                            <span>✉️</span>
-                            <a href={`mailto:${selected.nicCoordEmail}`}>{selected.nicCoordEmail}</a>
-                          </div>
-                        ) : (
-                          <div className="contact-card__info-item" style={{ color: '#94a3b8' }}>
-                            <span>✉️</span> Not specified
-                          </div>
-                        )}
-                        <div className="contact-card__info-item">
-                          <span>📞</span> +91-11-24305000 (NIC Desk)
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 4. Assigned NICSI Staff / PM */}
-                    <div className="contact-card">
-                      <div className="contact-card__header">
-                        <span className="contact-card__role">Assigned NICSI Staff / PM</span>
-                        <span className="contact-card__icon">💼</span>
-                      </div>
-                      <div className="contact-card__name">
-                        {(selected as any).prjMgrName || 'Atul Rastogi'}
-                      </div>
-                      <div className="contact-card__dept">
-                        Senior Project Manager · Staff ID: #{selected.prjMgrId || '1626'}
-                      </div>
-                      <div className="contact-card__info">
-                        <div className="contact-card__info-item">
-                          <span>✉️</span>
-                          <a href={`mailto:${selected.staffEmailId || 'atul.rastogi@nic.in'}`}>
-                            {selected.staffEmailId || 'atul.rastogi@nic.in'}
-                          </a>
-                        </div>
-                        <div className="contact-card__info-item">
-                          <span>📞</span> +91-11-22900000 (Ext. {selected.prjMgrId || '1626'})
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
 
                 <div style={{ marginTop: '1.5rem', textAlign: 'right' }}>
                   <button className="btn btn-outline" onClick={downloadProjectDetails} style={{ fontWeight: 600, borderColor: '#006699', color: '#006699' }}>
@@ -1216,14 +1202,18 @@ NICSI Project Monitoring System
                       </thead>
                       <tbody>
                         {filteredPos.map((po: any) => {
-                          const expired = po.todate && new Date(po.todate) < new Date();
+                          const validFrom = po.frdate || po.poDate || '—';
+                          const validTo = po.todate || '—';
+                          const expired = po.todate ? new Date(po.todate) < new Date() : false;
                           return (
                             <tr key={po.headerId}>
                               <td><code className="proj-code-cell">{po.finalPoNo || po.poNo || '—'}</code></td>
                               <td>{po.vendorName || <span className="no-data">—</span>}</td>
                               <td>{po.poDate || '—'}</td>
-                              <td style={{ fontSize: '0.8rem', color: '#555' }}>
-                                {po.frdate || '?'} → {po.todate || '?'}
+                              <td style={{ fontSize: '0.82rem', whiteSpace: 'nowrap' }}>
+                                <span style={{ fontWeight: 600, color: '#003366' }}>{validFrom}</span>
+                                <span style={{ margin: '0 6px', color: '#94a3b8' }}>→</span>
+                                <span style={{ fontWeight: 600, color: expired ? '#dc3545' : '#28a745' }}>{validTo}</span>
                               </td>
                               <td className="ta-r num-cell">{formatCurrencyFull(Number(po.total) || 0)}</td>
                               <td>
@@ -1777,6 +1767,44 @@ NICSI Project Monitoring System
 
   return (
     <div className="projects-page page-container">
+      {/* MD & SuperAdmin Unassigned Projects & Allocation Desk (hidden when drilling down into PMs, categories, or filters) */}
+      {(user?.role === 'MD' || user?.role === 'SUPER_ADMIN') &&
+        !forcedPrjMgrId &&
+        !forcedProjectType &&
+        !scopedPrjMgrId &&
+        !filters.expiryStatus &&
+        !filters.state &&
+        !filters.projectType &&
+        !filters.projectManager &&
+        !searchParams.get('expiryStatus') &&
+        !searchParams.get('projectType') &&
+        !searchParams.get('projectCategory') &&
+        !searchParams.get('state') &&
+        !searchParams.get('prjMgrId') && (
+        <UnassignedProjectsSection onAssigned={fetchProjects} />
+      )}
+
+      {/* Back to Dashboard bar when viewing expiry filter */}
+      {(filters.expiryStatus || searchParams.get('expiryStatus')) && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', background: '#ffffff', padding: '0.65rem 1.25rem', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.03)' }}>
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard')}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              background: '#003366', color: '#ffffff', border: 'none',
+              borderRadius: '6px', padding: '6px 14px', fontSize: '0.82rem',
+              fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+            }}
+          >
+            ← Back to Dashboard
+          </button>
+          <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#003366' }}>
+            Filtered Registry Scope: PO Expiry Status ({filters.expiryStatus || searchParams.get('expiryStatus')})
+          </span>
+        </div>
+      )}
+
       {/* Impersonation / PM Portfolio Drill-down Header */}
       {(onBackToRoster || (user?.role === 'MD' && scopedPrjMgrId != null)) && (
         <div style={{
@@ -1792,7 +1820,7 @@ NICSI Project Monitoring System
               style={{ background: '#fff', color: '#003366', fontWeight: 700, border: 'none', cursor: 'pointer' }}
               onClick={onBackToRoster || (() => window.history.back())}
             >
-              ← Back to PM Roster
+              {backLabel || '← Back to PM Roster'}
             </button>
             <div>
               <div style={{ fontSize: '1rem', fontWeight: 800 }}>
@@ -1802,9 +1830,16 @@ NICSI Project Monitoring System
                     {pmInfo.zone}
                   </span>
                 )}
+                {forcedProjectType && forcedProjectType !== '__ALL__' && (
+                  <span style={{ marginLeft: 8, fontSize: '0.7rem', padding: '2px 8px', borderRadius: 4, background: '#FF660040', color: '#ffe0c0' }}>
+                    Category: {forcedProjectType}
+                  </span>
+                )}
               </div>
               <div style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.85)', marginTop: 2 }}>
-                Full PM access &amp; control mode · Showing projects, financial holds &amp; PO sub-registers for {pmInfo?.fullName || `ID #${scopedPrjMgrId}`}
+                {forcedProjectType && forcedProjectType !== '__ALL__'
+                  ? `Filtered by project category "${forcedProjectType}" · ${pmInfo?.fullName || `ID #${scopedPrjMgrId}`}`
+                  : `Full PM access & control mode · Showing projects, financial holds & PO sub-registers for ${pmInfo?.fullName || `ID #${scopedPrjMgrId}`}`}
               </div>
             </div>
           </div>
@@ -1881,14 +1916,23 @@ NICSI Project Monitoring System
       </div>
 
       {/* Active Filter Banner */}
-      {(filters.expiryStatus || filters.financialStatus || filters.hasVendorBilled || filters.hasExpBills || filters.hasPOs || filters.hasInvoiced || filters.search) && (
+      {(filters.expiryStatus || filters.financialStatus || filters.hasVendorBilled || filters.hasExpBills || filters.hasPOs || filters.hasInvoiced || filters.search || filters.state || (forcedProjectType && forcedProjectType !== '__ALL__')) && (
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           background: '#f0f4f8', border: '1px solid #d0dbe5', borderRadius: 8,
           padding: '0.65rem 1rem', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', fontSize: '0.85rem' }}>
-            <span style={{ fontWeight: 700, color: '#003366' }}>Active Filter:</span>
+            {forcedProjectType && forcedProjectType !== '__ALL__' && (
+              <span className="chip chip--purple" style={{ background: '#f5f0ff', color: '#6f42c1', border: '1px solid #d8b4fe', fontWeight: 700 }}>
+                Category: <strong>{forcedProjectType}</strong>
+              </span>
+            )}
+            {filters.state && (
+              <span className="chip chip--navy" style={{ background: '#e6f0fa', color: '#003366', border: '1px solid #b3d1ff', fontWeight: 700 }}>
+                State: <strong>{STATE_MAP[filters.state.toUpperCase()] || filters.state}</strong>
+              </span>
+            )}
             {filters.expiryStatus && (
               <span className="chip chip--orange" style={{ background: '#fff0e6', color: '#cc5200', border: '1px solid #ffccb3' }}>
                 PO Expiry: <strong>{filters.expiryStatus}</strong>
@@ -1980,6 +2024,7 @@ NICSI Project Monitoring System
                 const effectivePo = Math.max(0, (p.poAmount || 0) - penaltyFines);
                 const vendorPending = Math.max(0, effectivePo - (p.totalAmountPaid || 0));
                 const stateCode = extractStateCode(p.projectCode);
+                const stateName = getStateName(p.projectCode);
                 const expiryStatus = (p as any).expiryStatus;
                 return (
                   <tr key={p.headerId} className={`table-row-hover ${expiryStatus === 'EXPIRED' ? 'table-row-expired' : ''}`} style={{ cursor: 'pointer' }} onClick={() => handleSelectProject(p, 'overview')}>
@@ -1989,7 +2034,11 @@ NICSI Project Monitoring System
                         <div className="org-cell__name">{p.customerName}</div>
                       </div>
                     </td>
-                    <td><span className="state-cell">{STATE_MAP[stateCode] || stateCode}</span></td>
+                    <td>
+                      <span className="state-cell" title={`${stateCode} - ${stateName}`} style={{ fontSize: '0.78rem', fontWeight: 600 }}>
+                        {stateName}
+                      </span>
+                    </td>
                     <td>
                       {(() => {
                         const expiry = (p as any).expiryStatus;
@@ -2077,9 +2126,22 @@ NICSI Project Monitoring System
                       </span>
                     </td>
                     <td>
-                      <button className="btn btn-outline btn-sm" onClick={(e) => { e.stopPropagation(); handleSelectProject(p, 'overview'); }}>
-                        Details
-                      </button>
+                      <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                        <button className="btn btn-outline btn-sm" onClick={(e) => { e.stopPropagation(); handleSelectProject(p, 'overview'); }}>
+                          Details
+                        </button>
+                        {(user?.role === 'MD' || user?.role === 'SUPER_ADMIN') && (
+                          <button
+                            type="button"
+                            className="btn btn-sm"
+                            style={{ background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', fontWeight: 600, padding: '2px 6px', fontSize: '0.75rem', cursor: 'pointer' }}
+                            onClick={(e) => { e.stopPropagation(); openAssignModal(p); }}
+                            title="Reassign PM"
+                          >
+                            Assign
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -2100,6 +2162,124 @@ NICSI Project Monitoring System
           </div>
         )}
       </div>
+
+      {/* Reassign PM Modal Dialog */}
+      {assignModal.open && assignModal.project && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem',
+          backdropFilter: 'blur(3px)'
+        }}>
+          <div style={{
+            background: '#fff', borderRadius: '12px', width: '100%', maxWidth: '480px',
+            boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)',
+            overflow: 'hidden'
+          }}>
+            <div style={{
+              background: 'linear-gradient(135deg, #003366, #0284c7)', color: '#fff',
+              padding: '1.2rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+            }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>Assign / Reassign Project</h3>
+                <div style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.85)', marginTop: 2 }}>
+                  Project: <strong>{assignModal.project.projectCode}</strong> (#{assignModal.project.headerId})
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAssignModal(prev => ({ ...prev, open: false, msg: null }))}
+                style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: '1.2rem', cursor: 'pointer' }}
+              >✕</button>
+            </div>
+
+            <form onSubmit={handleAssignSubmit} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+              {assignModal.msg && (
+                <div style={{
+                  padding: '0.75rem 1rem', borderRadius: 8, fontSize: '0.85rem', fontWeight: 600,
+                  background: assignModal.msg.type === 'success' ? '#ecfdf5' : '#fef2f2',
+                  color: assignModal.msg.type === 'success' ? '#065f46' : '#991b1b',
+                  border: `1px solid ${assignModal.msg.type === 'success' ? '#a7f3d0' : '#fecaca'}`
+                }}>
+                  {assignModal.msg.text}
+                </div>
+              )}
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '0.35rem' }}>
+                  Current Project Assignment
+                </label>
+                <div style={{ padding: '0.5rem 0.75rem', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: '0.85rem' }}>
+                  {assignModal.project.prjMgrId ? `Assigned to PM ID #${assignModal.project.prjMgrId}` : 'Unassigned · Central Corporate Pool'}
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '0.35rem' }}>
+                  Select New Project Manager *
+                </label>
+                <select
+                  value={assignModal.selectedPmId}
+                  onChange={e => setAssignModal(prev => ({ ...prev, selectedPmId: e.target.value }))}
+                  disabled={pmRosterLoading || assignModal.loading}
+                  style={{
+                    width: '100%', padding: '0.65rem 0.75rem', borderRadius: 6,
+                    border: '1px solid #cbd5e1', fontSize: '0.875rem', background: '#fff'
+                  }}
+                >
+                  <option value="">— Unassign (Return to Central Corporate Pool) —</option>
+                  {pmRoster.map((pm: any) => (
+                    <option key={pm.prjMgrId} value={String(pm.prjMgrId)}>
+                      {pm.fullName} ({pm.zone || 'Zone'}) — PRJ_MGR_ID: {pm.prjMgrId} ({pm.projectCount || 0} active projects)
+                    </option>
+                  ))}
+                </select>
+                {pmRosterLoading && <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 4 }}>Loading PM list…</div>}
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '0.35rem' }}>
+                  Reason / Governance Remarks
+                </label>
+                <textarea
+                  rows={3}
+                  value={assignModal.remarks}
+                  onChange={e => setAssignModal(prev => ({ ...prev, remarks: e.target.value }))}
+                  placeholder="e.g. Zonal workload rebalancing, specialized technical domain handover, regional realignment..."
+                  style={{
+                    width: '100%', padding: '0.65rem 0.75rem', borderRadius: 6,
+                    border: '1px solid #cbd5e1', fontSize: '0.85rem', resize: 'vertical'
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setAssignModal(prev => ({ ...prev, open: false, msg: null }))}
+                  disabled={assignModal.loading}
+                  style={{
+                    padding: '0.5rem 1rem', borderRadius: 6, border: '1px solid #cbd5e1',
+                    background: '#f8fafc', color: '#475569', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={assignModal.loading || pmRosterLoading}
+                  style={{
+                    padding: '0.5rem 1.25rem', borderRadius: 6, border: 'none',
+                    background: 'linear-gradient(135deg, #003366, #0284c7)', color: '#fff',
+                    fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer'
+                  }}
+                >
+                  {assignModal.loading ? 'Assigning…' : 'Confirm Assignment 🚀'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

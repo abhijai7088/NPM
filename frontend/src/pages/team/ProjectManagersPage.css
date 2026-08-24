@@ -29,14 +29,56 @@
   color: #ffffff;
 }
 
-/* Org KPIs */
-.pm-org-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.85rem; }
-@media (max-width: 1100px) { .pm-org-grid { grid-template-columns: repeat(3, 1fr); } }
-@media (max-width: 700px) { .pm-org-grid { grid-template-columns: repeat(2, 1fr); } }
-.pm-org-card { background: #fff; border: 1px solid var(--color-border-light, #e2e8f0); border-radius: var(--radius-lg, 10px); padding: 0.85rem 1rem; box-shadow: var(--shadow-card); }
-.pm-org-card__label { font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--color-text-muted, #6c757d); }
-.pm-org-card__val { font-family: var(--font-heading); font-size: 1.4rem; font-weight: 800; margin-top: 0.25rem; }
-.pm-org-card__sub { font-size: 0.72rem; color: var(--color-text-light, #888); margin-top: 0.1rem; }
+.pm-header-banner {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+.pm-action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+/* Org KPIs & Stats Grid */
+.pm-stats-grid, .pm-org-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.85rem;
+}
+@media (max-width: 1100px) { .pm-stats-grid, .pm-org-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 700px) { .pm-stats-grid, .pm-org-grid { grid-template-columns: repeat(2, 1fr); } }
+
+.pm-stat-card, .pm-org-card {
+  background: #ffffff;
+  border: 1px solid var(--color-border-light, #e2e8f0);
+  border-radius: var(--radius-lg, 10px);
+  padding: 0.85rem 1rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+.pm-stat-label, .pm-org-card__label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-muted, #6c757d);
+}
+.pm-stat-value, .pm-org-card__val {
+  font-family: var(--font-heading);
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #003366;
+  margin-top: 0.25rem;
+}
+.pm-stat-sub, .pm-org-card__sub {
+  font-size: 0.72rem;
+  color: var(--color-text-light, #888);
+  margin-top: 0.1rem;
+}
 
 /* Filter Bar */
 .pm-filter-bar {

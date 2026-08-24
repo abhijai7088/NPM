@@ -21,6 +21,7 @@ export const Project360Page: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const role = user?.role ?? 'PM';
+  const isMdOrAdmin = role === 'MD' || role === 'SUPER_ADMIN';
 
   const hId = Number(headerId);
   const initialTab = (searchParams.get('tab') as Tab) ?? 'Overview';
@@ -30,6 +31,15 @@ export const Project360Page: React.FC = () => {
   const [project, setProject] = useState<any>(null);
   const [loading, setLoading]  = useState(true);
   const [error, setError]      = useState<string | null>(null);
+
+  // PM Reassignment Modal
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [pmRoster, setPmRoster] = useState<any[]>([]);
+  const [pmRosterLoading, setPmRosterLoading] = useState(false);
+  const [selectedNewPmId, setSelectedNewPmId] = useState('');
+  const [assignRemarks, setAssignRemarks] = useState('');
+  const [assigning, setAssigning] = useState(false);
+  const [assignMsg, setAssignMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   // Tickets
   const [tickets, setTickets]       = useState<ProjectTicket[]>([]);
@@ -43,13 +53,17 @@ export const Project360Page: React.FC = () => {
   const [newDesc, setNewDesc]         = useState('');
   const [creating, setCreating]       = useState(false);
 
-  useEffect(() => {
+  const loadProjectData = () => {
     if (!hId) return;
     setLoading(true);
     axios.get(`/api/v1/projects/${hId}`, { withCredentials: true })
       .then(res => setProject(res.data?.data ?? res.data))
       .catch(() => setError('Failed to load project.'))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadProjectData();
   }, [hId]);
 
   useEffect(() => {
@@ -57,6 +71,52 @@ export const Project360Page: React.FC = () => {
       listTickets({ headerId: hId }).then(r => setTickets(r.data)).catch(() => {});
     }
   }, [activeTab, hId]);
+
+  // Load PM roster for reassignment
+  const openAssignModal = () => {
+    setShowAssignModal(true);
+    setAssignMsg(null);
+    setSelectedNewPmId(project?.prjMgrId ? String(project.prjMgrId) : '');
+    setAssignRemarks('');
+    if (pmRoster.length === 0) {
+      setPmRosterLoading(true);
+      axios.get('/api/v1/project-managers')
+        .then(res => {
+          if (res.data?.success) {
+            setPmRoster(res.data.data ?? []);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setPmRosterLoading(false));
+    }
+  };
+
+  const handleAssignSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAssigning(true);
+    setAssignMsg(null);
+    try {
+      const res = await axios.put(`/api/v1/projects/${hId}/assign`, {
+        newPrjMgrId: selectedNewPmId || null,
+        remarks: assignRemarks || 'Assigned via Project 360° Management View',
+      }, { withCredentials: true });
+
+      if (res.data?.success) {
+        setAssignMsg({ text: res.data.message || 'Project successfully assigned!', type: 'success' });
+        loadProjectData();
+        setTimeout(() => {
+          setShowAssignModal(false);
+          setAssignMsg(null);
+        }, 1200);
+      } else {
+        setAssignMsg({ text: res.data?.message || 'Assignment failed.', type: 'error' });
+      }
+    } catch (err: any) {
+      setAssignMsg({ text: err?.response?.data?.message || 'Failed to reassign project.', type: 'error' });
+    } finally {
+      setAssigning(false);
+    }
+  };
 
   const handleCreateTicket = async () => {
     if (!newTitle.trim()) return;
@@ -96,27 +156,57 @@ export const Project360Page: React.FC = () => {
       {/* Project Header */}
       <div className="p360-hero">
         <div className="p360-hero__main">
-          <div className="p360-project-code">{p.projectCode ?? p.project_cd}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <div className="p360-project-code">{p.projectCode ?? p.project_cd}</div>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '3px 8px', borderRadius: 4, background: p.prjMgrId ? '#e0f2fe' : '#fef3c7', color: p.prjMgrId ? '#0369a1' : '#92400e' }}>
+              {p.prjMgrId ? `Managed by PM #${p.prjMgrId}` : 'Corporate Unassigned Pool'}
+            </span>
+          </div>
           <h1 className="p360-project-name">{p.projectName ?? p.prj_nm}</h1>
           <div className="p360-project-client">{p.customerName ?? p.customer_name}</div>
         </div>
         <div className="p360-hero__stats">
           <div className="p360-stat">
             <label>Budget</label>
-            <value>{fmt(p.prjBudgetNo ?? p.prj_budget_no)}</value>
+            <span className="p360-value">{fmt(p.prjBudgetNo ?? p.prj_budget_no)}</span>
           </div>
           <div className="p360-stat">
             <label>Received</label>
-            <value>{fmt(p.amountReceived ?? p.amount_received)}</value>
+            <span className="p360-value">{fmt(p.amountReceived ?? p.amount_received)}</span>
           </div>
           <div className="p360-stat">
             <label>PO Amount</label>
-            <value>{fmt(p.poAmount ?? p.po_amount)}</value>
+            <span className="p360-value">{fmt(p.poAmount ?? p.po_amount)}</span>
           </div>
           <div className="p360-stat">
             <label>Open Tickets</label>
-            <value className={overdueTickets.length > 0 ? 'warn' : ''}>{openTickets.length}</value>
+            <span className={`p360-value ${overdueTickets.length > 0 ? 'warn' : ''}`}>{openTickets.length}</span>
           </div>
+          {isMdOrAdmin && (
+            <div style={{ display: 'flex', alignItems: 'center', paddingLeft: '0.5rem' }}>
+              <button
+                type="button"
+                className="p360-btn"
+                style={{
+                  background: 'linear-gradient(135deg, #003366, #0284c7)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '0.5rem 0.85rem',
+                  fontWeight: 700,
+                  fontSize: '0.8rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 2px 6px rgba(0,51,102,0.2)'
+                }}
+                onClick={openAssignModal}
+              >
+                🔄 Assign PM
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -145,7 +235,33 @@ export const Project360Page: React.FC = () => {
           <div className="p360-overview">
             <div className="p360-info-grid">
               <div className="p360-info-card">
-                <h3>Project Details</h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                  <h3 style={{ margin: 0 }}>Project Governance</h3>
+                  {isMdOrAdmin && (
+                    <button
+                      type="button"
+                      onClick={openAssignModal}
+                      style={{
+                        background: '#e0f2fe',
+                        color: '#0369a1',
+                        border: '1px solid #bae6fd',
+                        borderRadius: 6,
+                        padding: '3px 8px',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Change PM Assignment
+                    </button>
+                  )}
+                </div>
+                <div className="p360-field">
+                  <label>Assigned PM</label>
+                  <span style={{ fontWeight: 700, color: '#003366' }}>
+                    {p.prjMgrName || (p.prjMgrId ? `Project Manager #${p.prjMgrId}` : 'Unassigned (Central Corporate Pool)')}
+                  </span>
+                </div>
                 <div className="p360-field"><label>Category</label><span>{p.projectCategory ?? p.project_category ?? '—'}</span></div>
                 <div className="p360-field"><label>Type</label><span>{p.prjType ?? p.prj_type ?? '—'}</span></div>
                 <div className="p360-field"><label>State Code</label><span>{p.stateCode ?? p.state_code ?? '—'}</span></div>
@@ -269,6 +385,124 @@ export const Project360Page: React.FC = () => {
           onClose={() => setSelectedTicketId(null)}
           onRefresh={() => listTickets({ headerId: hId }).then(r => setTickets(r.data))}
         />
+      )}
+
+      {/* Assign / Reassign PM Modal */}
+      {showAssignModal && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem',
+          backdropFilter: 'blur(3px)'
+        }}>
+          <div style={{
+            background: '#fff', borderRadius: '12px', width: '100%', maxWidth: '480px',
+            boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)',
+            overflow: 'hidden'
+          }}>
+            <div style={{
+              background: 'linear-gradient(135deg, #003366, #0284c7)', color: '#fff',
+              padding: '1.2rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+            }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>Assign / Reassign Project</h3>
+                <div style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.85)', marginTop: 2 }}>
+                  Project: <strong>{p.projectCode}</strong> (#{p.headerId})
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAssignModal(false)}
+                style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: '1.2rem', cursor: 'pointer' }}
+              >✕</button>
+            </div>
+
+            <form onSubmit={handleAssignSubmit} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+              {assignMsg && (
+                <div style={{
+                  padding: '0.75rem 1rem', borderRadius: 8, fontSize: '0.85rem', fontWeight: 600,
+                  background: assignMsg.type === 'success' ? '#ecfdf5' : '#fef2f2',
+                  color: assignMsg.type === 'success' ? '#065f46' : '#991b1b',
+                  border: `1px solid ${assignMsg.type === 'success' ? '#a7f3d0' : '#fecaca'}`
+                }}>
+                  {assignMsg.text}
+                </div>
+              )}
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '0.35rem' }}>
+                  Current Management Scope
+                </label>
+                <div style={{ padding: '0.5rem 0.75rem', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: '0.85rem' }}>
+                  {p.prjMgrId ? `Assigned to PM ID #${p.prjMgrId}` : 'Unassigned · Central Corporate Pool'}
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '0.35rem' }}>
+                  Select New Project Manager *
+                </label>
+                <select
+                  value={selectedNewPmId}
+                  onChange={e => setSelectedNewPmId(e.target.value)}
+                  disabled={pmRosterLoading || assigning}
+                  style={{
+                    width: '100%', padding: '0.65rem 0.75rem', borderRadius: 6,
+                    border: '1px solid #cbd5e1', fontSize: '0.875rem', background: '#fff'
+                  }}
+                >
+                  <option value="">— Unassign (Return to Central Corporate Pool) —</option>
+                  {pmRoster.map((pm: any) => (
+                    <option key={pm.prjMgrId} value={String(pm.prjMgrId)}>
+                      {pm.fullName} ({pm.zone || 'Zone'}) — PRJ_MGR_ID: {pm.prjMgrId} ({pm.projectCount || 0} active projects)
+                    </option>
+                  ))}
+                </select>
+                {pmRosterLoading && <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 4 }}>Loading PM list…</div>}
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '0.35rem' }}>
+                  Reason / Governance Remarks
+                </label>
+                <textarea
+                  rows={3}
+                  value={assignRemarks}
+                  onChange={e => setAssignRemarks(e.target.value)}
+                  placeholder="e.g. Zonal workload rebalancing, specialized technical domain handover, regional realignment..."
+                  style={{
+                    width: '100%', padding: '0.65rem 0.75rem', borderRadius: 6,
+                    border: '1px solid #cbd5e1', fontSize: '0.85rem', resize: 'vertical'
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowAssignModal(false)}
+                  disabled={assigning}
+                  style={{
+                    padding: '0.5rem 1rem', borderRadius: 6, border: '1px solid #cbd5e1',
+                    background: '#f8fafc', color: '#475569', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={assigning || pmRosterLoading}
+                  style={{
+                    padding: '0.5rem 1.25rem', borderRadius: 6, border: 'none',
+                    background: 'linear-gradient(135deg, #003366, #0284c7)', color: '#fff',
+                    fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer'
+                  }}
+                >
+                  {assigning ? 'Assigning…' : 'Confirm Assignment 🚀'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

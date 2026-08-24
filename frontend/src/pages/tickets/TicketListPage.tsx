@@ -9,6 +9,8 @@ import {
   type ProjectTicket,
 } from '../../api/tickets';
 import { TicketDetailModal } from '../../components/tickets/TicketDetailModal';
+import { CreateManagementTicketModal } from '../../components/tickets/CreateManagementTicketModal';
+import { UnassignedProjectsSection } from '../../components/projects/UnassignedProjectsSection';
 import { useAuthStore } from '../../store/authStore';
 import './TicketListPage.css';
 
@@ -26,6 +28,8 @@ interface ProjectOption {
   projectCode: string;
   projectName: string;
   customerName: string;
+  prjMgrId?: number;
+  prjMgrName?: string;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -49,7 +53,7 @@ export const TicketListPage: React.FC = () => {
   const [pmListLoading, setPmListLoading] = useState(false);
   const [selectedPmId, setSelectedPmId]   = useState<string>('');
 
-  // Project list (loaded per PM)
+  // Project list (loaded per PM or organisation-wide)
   const [projectList, setProjectList]               = useState<ProjectOption[]>([]);
   const [projectListLoading, setProjectListLoading] = useState(false);
   const [projectSearch, setProjectSearch]           = useState('');
@@ -62,6 +66,7 @@ export const TicketListPage: React.FC = () => {
   const [cType, setCType]           = useState('PO_FOLLOW_UP');
   const [cPri, setCPri]             = useState('MEDIUM');
   const [cHeaderId, setCHeaderId]   = useState('');
+  const [cAssignedTo, setCAssignedTo] = useState('');
   const [creating, setCreating]     = useState(false);
   const [createError, setCreateError] = useState('');
 
@@ -86,32 +91,78 @@ export const TicketListPage: React.FC = () => {
       .finally(() => setPmListLoading(false));
   }, [isMd]);
 
-  // ── Load projects for a given prjMgrId ───────────────────────────────────────
+  // ── Load projects for a given prjMgrId or Organisation-wide ─────────────────
 
   const loadProjects = useCallback(async (prjMgrId: number | null) => {
-    if (!prjMgrId) { setProjectList([]); return; }
     setProjectListLoading(true);
-    setProjectList([]);
     try {
-      const res = await axios.get(`/api/v1/project-managers/${prjMgrId}/projects`);
-      if (res.data.success) {
-        setProjectList(
-          (res.data.data as any[]).map((p: any) => ({
-            headerId:     Number(p.headerId ?? p.header_id),
-            projectCode:  p.projectCode ?? p.project_cd ?? '',
-            projectName:  p.projectName ?? p.prj_nm ?? '',
-            customerName: p.customerName ?? p.customer_name ?? '',
-          }))
-        );
+      if (prjMgrId) {
+        const res = await axios.get(`/api/v1/project-managers/${prjMgrId}/projects`);
+        if (res.data.success) {
+          setProjectList(
+            (res.data.data as any[]).map((p: any) => ({
+              headerId:     Number(p.headerId ?? p.header_id),
+              projectCode:  p.projectCode ?? p.project_cd ?? '',
+              projectName:  p.projectName ?? p.prj_nm ?? '',
+              customerName: p.customerName ?? p.customer_name ?? '',
+              prjMgrId:     p.prjMgrId ?? prjMgrId,
+              prjMgrName:   p.prjMgrName,
+            }))
+          );
+        }
+      } else {
+        const res = await axios.get(`/api/v1/projects/advanced-search?page=0&size=200`);
+        if (res.data.success && res.data.data) {
+          setProjectList(
+            (res.data.data as any[]).map((p: any) => ({
+              headerId:     Number(p.headerId ?? p.header_id),
+              projectCode:  p.projectCode ?? p.project_cd ?? '',
+              projectName:  p.projectName ?? p.prj_nm ?? '',
+              customerName: p.customerName ?? p.customer_name ?? '',
+              prjMgrId:     p.prjMgrId,
+              prjMgrName:   p.prjMgrName,
+            }))
+          );
+        }
       }
     } catch { /* ignore */ }
     finally { setProjectListLoading(false); }
   }, []);
 
-  // PM: load own projects on mount
+  // Initial load
   useEffect(() => {
-    if (isPm && user?.prjMgrId) loadProjects(user.prjMgrId);
-  }, [isPm, user?.prjMgrId, loadProjects]);
+    if (isPm && user?.prjMgrId) {
+      loadProjects(user.prjMgrId);
+    } else if (isMd || (role as string) === 'PMC') {
+      loadProjects(null);
+    }
+  }, [isPm, isMd, role, user?.prjMgrId, loadProjects]);
+
+  // Live debounced search when user types in project picker
+  useEffect(() => {
+    if (!projectSearch || projectSearch.trim().length < 2) return;
+    const timeout = setTimeout(async () => {
+      try {
+        const res = await axios.get(`/api/v1/projects/advanced-search?search=${encodeURIComponent(projectSearch.trim())}&size=50`);
+        if (res.data.success && res.data.data) {
+          const fetched: ProjectOption[] = (res.data.data as any[]).map((p: any) => ({
+            headerId:     Number(p.headerId ?? p.header_id),
+            projectCode:  p.projectCode ?? p.project_cd ?? '',
+            projectName:  p.projectName ?? p.prj_nm ?? '',
+            customerName: p.customerName ?? p.customer_name ?? '',
+            prjMgrId:     p.prjMgrId,
+            prjMgrName:   p.prjMgrName,
+          }));
+          setProjectList(prev => {
+            const seen = new Set(prev.map(x => x.headerId));
+            const newItems = fetched.filter(x => !seen.has(x.headerId));
+            return [...prev, ...newItems];
+          });
+        }
+      } catch {}
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [projectSearch]);
 
   // MD: when PM selection changes
   const handlePmSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -148,7 +199,8 @@ export const TicketListPage: React.FC = () => {
     return projectList.filter(p =>
       p.projectCode.toLowerCase().includes(q) ||
       p.projectName.toLowerCase().includes(q) ||
-      p.customerName.toLowerCase().includes(q)
+      p.customerName.toLowerCase().includes(q) ||
+      String(p.headerId).includes(q)
     );
   }, [projectList, projectSearch]);
 
@@ -179,9 +231,10 @@ export const TicketListPage: React.FC = () => {
         description: cDesc,
         ticketType: cType,
         priority: cPri,
-      });
+        assignedTo: cAssignedTo || undefined,
+      } as any);
       setShowCreate(false);
-      setCTitle(''); setCDesc(''); setCHeaderId('');
+      setCTitle(''); setCDesc(''); setCHeaderId(''); setCAssignedTo('');
       setProjectSearch(''); setShowProjectDropdown(false);
       await load();
     } catch (err: any) {
@@ -189,7 +242,7 @@ export const TicketListPage: React.FC = () => {
     } finally { setCreating(false); }
   };
 
-  const canCreate = (isMd && selectedPmId) || isPm;
+  const canCreate = true;
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
@@ -199,20 +252,34 @@ export const TicketListPage: React.FC = () => {
       {/* Header */}
       <div className="tl-header">
         <div>
-          <h1 className="tl-title">NICSI Work-Item Notices</h1>
+          <h1 className="tl-title">NICSI Management Tickets &amp; Governance Actions</h1>
           <p className="tl-subtitle">
-            PO follow-ups, bill submissions, vendor reminders &amp; compliance actions across all projects
+            Executive oversight, SLA tracking, PO extension governance, bill submissions &amp; compliance tracking across all projects
           </p>
         </div>
         {role !== 'OA' && (
           <button
             className="tl-create-btn"
-            onClick={() => { setShowCreate(v => !v); setCreateError(''); }}
+            onClick={() => setShowCreate(true)}
           >
-            {showCreate ? '✕ Cancel' : '+ Raise Work-Item Notice'}
+            + Create Management Ticket
           </button>
         )}
       </div>
+
+      {/* Governed 6-Section Management Ticket Modal */}
+      <CreateManagementTicketModal
+        isOpen={showCreate}
+        onClose={() => setShowCreate(false)}
+        onSuccess={() => {
+          setShowCreate(false);
+          load();
+        }}
+        userRole={role}
+      />
+
+      {/* ── MD / Super Admin: Unassigned Projects Panel ── */}
+      {isMd && <UnassignedProjectsSection onAssigned={load} />}
 
       {/* ── MD / Super Admin: PM Selector strip ── */}
       {isMd && (
@@ -243,234 +310,15 @@ export const TicketListPage: React.FC = () => {
               className="tl-pm-clear"
               onClick={() => {
                 setSelectedPmId('');
-                setProjectList([]);
+                loadProjects(null);
                 setCHeaderId('');
                 setProjectSearch('');
               }}
             >
-              ✕ Clear
+              ✕ Clear Filter
             </button>
           )}
           {pmListLoading && <span className="tl-pm-loading">Loading PMs…</span>}
-        </div>
-      )}
-
-      {/* ── Create Form ── */}
-      {showCreate && (
-        <div className="tl-create-form">
-          <div className="tl-create-header">
-            <h4>Raise New Work-Item Notice</h4>
-            {isMd && !selectedPmId && (
-              <span className="tl-create-hint">
-                ⚠ Select a PM above first to load their projects
-              </span>
-            )}
-          </div>
-
-          {/* Project Selector (MD after PM chosen, or PM login) */}
-          {(canCreate) && (
-            <div className="tl-field">
-              <label className="tl-field-label">
-                Select Project *
-                {projectList.length > 0 && (
-                  <span className="tl-field-count">{projectList.length} projects available</span>
-                )}
-              </label>
-
-              <div className="tl-project-picker" style={{ position: 'relative' }}>
-                <input
-                  className="tl-input"
-                  placeholder={
-                    projectListLoading
-                      ? 'Loading projects…'
-                      : projectList.length === 0
-                        ? isMd ? 'Select a PM above first' : 'Loading projects…'
-                        : `Search ${projectList.length} projects (code, name, client)…`
-                  }
-                  value={projectSearch}
-                  onChange={e => {
-                    setProjectSearch(e.target.value);
-                    setCHeaderId('');
-                    setShowProjectDropdown(true);
-                  }}
-                  onFocus={() => setShowProjectDropdown(true)}
-                  disabled={projectListLoading || projectList.length === 0}
-                  autoComplete="off"
-                />
-                {projectListLoading && <div className="tl-spinner-inline" />}
-
-                {showProjectDropdown && (filteredProjects.length > 0 || projectSearch) && (
-                  <div className="tl-project-dropdown">
-                    {filteredProjects.length === 0 ? (
-                      <div className="tl-project-none">No match for "{projectSearch}"</div>
-                    ) : (
-                      filteredProjects.slice(0, 50).map(p => (
-                        <div
-                          key={p.headerId}
-                          className={`tl-project-opt ${String(p.headerId) === cHeaderId ? 'tl-project-opt--sel' : ''}`}
-                          onMouseDown={e => e.preventDefault()}
-                          onClick={() => {
-                            setCHeaderId(String(p.headerId));
-                            setProjectSearch('');
-                            setShowProjectDropdown(false);
-                          }}
-                        >
-                          <span className="tl-proj-code">{p.projectCode}</span>
-                          <span className="tl-proj-name">{p.projectName}</span>
-                          <span className="tl-proj-client">{p.customerName}</span>
-                          <span className="tl-proj-id">#{p.headerId}</span>
-                        </div>
-                      ))
-                    )}
-                    {filteredProjects.length > 50 && (
-                      <div className="tl-project-more">+{filteredProjects.length - 50} more — refine search above</div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {selectedProject && (
-                <div className="tl-selected-proj">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#16A34A" strokeWidth="3">
-                    <polyline points="20 6 9 17 4 12"/>
-                  </svg>
-                  <strong>{selectedProject.projectCode}</strong> · {selectedProject.projectName}
-                  <span className="tl-selected-proj-client">({selectedProject.customerName})</span>
-                  <span className="tl-selected-proj-id">ID: {selectedProject.headerId}</span>
-                  <button
-                    className="tl-clear-proj"
-                    onClick={() => { setCHeaderId(''); setProjectSearch(''); }}
-                  >✕</button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Fallback: plain input for PMC / unknown roles */}
-          {!canCreate && role !== 'OA' && (
-            <div className="tl-create-row">
-              <input
-                className="tl-input"
-                placeholder="Project ID (header_id) *"
-                value={cHeaderId}
-                onChange={e => setCHeaderId(e.target.value)}
-                type="number"
-              />
-            </div>
-          )}
-
-          <div className="tl-field" style={{ marginTop: '0.75rem' }}>
-            <label className="tl-field-label">
-              Notice Category &amp; Priority *
-              <span className="tl-sub-hint">Select the operational workflow type and urgency level</span>
-            </label>
-            <div className="tl-create-row">
-              <select className="tl-select" value={cType} onChange={e => setCType(e.target.value)}>
-                {Object.entries(TICKET_TYPE_LABELS).map(([k, v]) => (
-                  <option key={k} value={k}>{v}</option>
-                ))}
-              </select>
-              <select className="tl-select" value={cPri} onChange={e => setCPri(e.target.value)}>
-                {['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map(p => (
-                  <option key={p} value={p}>{p} Priority</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="tl-field" style={{ marginTop: '0.75rem' }}>
-            <label className="tl-field-label">
-              Notice Subject / Title *
-              <span className="tl-sub-hint">Summary headline describing the action required for the Project Manager &amp; Operations Officer</span>
-            </label>
-            <input
-              className="tl-input"
-              placeholder="e.g. [PO-EXPIRY] Urgent Purchase Order extension required for Project"
-              value={cTitle}
-              onChange={e => setCTitle(e.target.value)}
-            />
-
-            {/* Smart Suggested Title Chips */}
-            <div style={{ marginTop: '0.4rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#003366', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                💡 Click a template to auto-fill subject:
-              </span>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
-                {[
-                  ...(cType === 'PO_FOLLOWUP' ? [
-                    '📄 [PO-EXPIRY] Urgent Purchase Order extension required before expiry',
-                    '📄 [PO-ISSUE] Follow-up on pending client Purchase Order issuance',
-                    '📄 [PO-AMENDMENT] Scope modification & PO budget amendment request',
-                  ] : cType === 'BILL_SUBMISSION' ? [
-                    '🧾 [BILL-SUBMIT] Vendor Invoice submission follow-up against PO',
-                    '🧾 [BILL-VERIFY] Bill verification & GST invoice compliance check',
-                  ] : cType === 'NICSI_HOLD_RELEASE' ? [
-                    '💰 [HOLD-RELEASE] Payment milestone verification for NICSI cash hold release',
-                    '💰 [FUNDS-RECV] Client fund realization & bank credit confirmation',
-                  ] : cType === 'VENDOR_PAYMENT' ? [
-                    '💳 [VENDOR-PAY] Vendor payment disbursement approval request',
-                    '💳 [PENALTY-CHECK] Penalty deduction verification prior to payment release',
-                  ] : [
-                    '📢 [ACTION-REQ] Operational follow-up and compliance action required',
-                    '⏰ [MILESTONE] Milestone review & status verification notice',
-                  ])
-                ].map((sug, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    style={{
-                      background: cTitle === sug ? '#e0f2fe' : '#f8fafc',
-                      color: cTitle === sug ? '#0369a1' : '#475569',
-                      border: cTitle === sug ? '1px solid #bae6fd' : '1px solid #cbd5e1',
-                      borderRadius: '6px',
-                      padding: '0.25rem 0.55rem',
-                      fontSize: '0.74rem',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      transition: 'all 0.15s ease'
-                    }}
-                    onClick={() => setCTitle(sug)}
-                  >
-                    {sug}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="tl-field" style={{ marginTop: '0.75rem' }}>
-            <label className="tl-field-label">
-              Detailed Instructions &amp; Notes
-              <span className="tl-sub-hint">Specify exact PO reference number, bill dates, invoice values, or compliance instructions</span>
-            </label>
-            <textarea
-              className="tl-textarea"
-              rows={3}
-              placeholder="Provide exact PO number, bill date, milestone details, or action instructions for the assignee…"
-              value={cDesc}
-              onChange={e => setCDesc(e.target.value)}
-            />
-          </div>
-
-
-          {createError && <div className="tl-create-error">{createError}</div>}
-
-          <div className="tl-create-actions">
-            <button
-              className="tl-btn tl-btn--primary"
-              onClick={handleCreate}
-              disabled={creating || !cTitle.trim() || !cHeaderId}
-            >
-              {creating ? 'Raising…' : 'Raise Notice'}
-            </button>
-            <button
-              className="tl-btn tl-btn--secondary"
-              onClick={() => { setShowCreate(false); setCreateError(''); }}
-            >
-              Cancel
-            </button>
-          </div>
         </div>
       )}
 

@@ -44,35 +44,28 @@ public class ScopeResolver {
                     new AccessScope(username, role, null);
 
             case "MD" -> {
-                List<Long> ids = userRepo.findByRoleAndManagedBy("PM", username).stream()
-                        .map(AppUser::getPrjMgrId)
-                        .filter(Objects::nonNull)
-                        .distinct()
-                        .collect(Collectors.toList());
-                
-                // Fallback: If no PMs are explicitly bound to this username via managedBy string,
-                // MD defaults to viewing all active PMs in the organization.
-                if (ids.isEmpty()) {
-                    ids = userRepo.findByRole("PM").stream()
-                            .map(AppUser::getPrjMgrId)
-                            .filter(Objects::nonNull)
-                            .distinct()
-                            .collect(Collectors.toList());
-                }
-                yield new AccessScope(username, role, ids);
+                // Managing Director has org-wide oversight over all projects and PMs.
+                yield new AccessScope(username, role, null);
             }
 
             case "PM" -> {
                 Long pId = callerUser != null ? callerUser.getPrjMgrId() : null;
                 
-                // Fallback: If prjMgrId wasn't set on the account, resolve to 1626 for Atul Rastogi
                 if (pId == null) {
-                    if ("pm_atul_rastogi".equalsIgnoreCase(username) || "atul".equalsIgnoreCase(username) || rawName.contains("atul") || rawName.contains("satyam")) {
-                        pId = 1626L;
+                    List<AppUser> matches = userRepo.findByRole("PM");
+                    for (AppUser pmUser : matches) {
+                        if (pmUser.getPrjMgrId() != null) {
+                            String uName = pmUser.getUsername().toLowerCase();
+                            String uEmail = pmUser.getEmail() != null ? pmUser.getEmail().toLowerCase() : "";
+                            if (uName.equals(rawName) || uName.contains(rawName) || rawName.contains(uName) ||
+                                uEmail.startsWith(rawName) || rawName.equals(uEmail.split("@")[0])) {
+                                pId = pmUser.getPrjMgrId();
+                                break;
+                            }
+                        }
                     }
                 }
                 
-                // Final safety fallback: If still null, check if any active PM profile exists
                 if (pId == null) {
                     pId = 1626L;
                 }
@@ -80,6 +73,7 @@ public class ScopeResolver {
                 List<Long> ids = List.of(pId);
                 yield new AccessScope(username, role, ids);
             }
+
 
             // PMC: Project Monitoring Cell — org-wide unrestricted read access.
             // PMC cannot write to project financial data but can read all projects

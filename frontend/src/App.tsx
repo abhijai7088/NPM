@@ -21,6 +21,7 @@ const AuditLogPage        = lazy(() => import('./pages/admin/AuditLogPage').then
 const PmcTowerPage        = lazy(() => import('./pages/pmc/PmcTowerPage').then(m => ({ default: m.PmcTowerPage })));
 const TicketListPage      = lazy(() => import('./pages/tickets/TicketListPage').then(m => ({ default: m.TicketListPage })));
 const OaTaskDashboard     = lazy(() => import('./pages/oa/OaTaskDashboard').then(m => ({ default: m.OaTaskDashboard })));
+const PoExpiryAlertsPage  = lazy(() => import('./pages/projects/PoExpiryAlertsPage').then(m => ({ default: m.PoExpiryAlertsPage })));
 
 // Loading spinner
 const PageLoader = () => (
@@ -132,6 +133,14 @@ function App() {
          * ──────────────────────────────────────────────────────────────── */}
         <Route element={<ProtectedRoute allowedRoles={['MD', 'PM', 'PMC', 'SUPER_ADMIN']} />}>
           <Route element={<AppShell />}>
+            <Route
+              path="/po-expiry-alerts"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <PoExpiryAlertsPage />
+                </Suspense>
+              }
+            />
             <Route
               path="/projects/:headerId"
               element={

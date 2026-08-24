@@ -1,13 +1,19 @@
+import os
 import psycopg2
 import sys
 
 def main():
+    db_host = os.environ.get("DB_HOST", "localhost")
+    db_port = os.environ.get("DB_PORT", "5433")
+    db_name = os.environ.get("DB_NAME", "npms_db")
+    db_user = os.environ.get("DB_USER", "npms_user")
+    db_pass = os.environ.get("DB_PASSWORD", "npms_local_pass_2026")
     conn = psycopg2.connect(
-        host="localhost",
-        port=5433,
-        dbname="npms_db",
-        user="npms_user",
-        password="npms_local_pass_2026"
+        host=db_host,
+        port=db_port,
+        dbname=db_name,
+        user=db_user,
+        password=db_pass
     )
     cur = conn.cursor()
 

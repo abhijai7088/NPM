@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell, LabelList, ComposedChart, Line } from 'recharts';
-import { formatCurrency, formatCurrencyFull, STATE_MAP, computeGst } from '../../utils/formatters';
+import { formatCurrency, formatCurrencyFull, STATE_MAP, computeGst, extractStateCode, getStateName } from '../../utils/formatters';
 import { useAuthStore } from '../../store/authStore';
 import './FinancePage.css';
 
@@ -227,11 +227,8 @@ export const FinancePage: React.FC = () => {
             if (effectivePoAmount > 0 && (p.totalAmountPaid || 0) >= effectivePoAmount) paymentStatus = 'cleared';
             else if ((p.totalAmountPaid || 0) > 0) paymentStatus = 'partial';
             
-            let stateCode = 'NA';
-            if (p.projectCode) {
-              const match = p.projectCode.match(/ZO([A-Z]{2})/);
-              if (match) stateCode = match[1];
-            }
+            const stateCode = p.stateCode || extractStateCode(p.projectCode);
+            const stateName = getStateName(p.projectCode || stateCode);
 
             return {
               ...p,
@@ -243,7 +240,7 @@ export const FinancePage: React.FC = () => {
               vendorPendingPayment: Math.max(0, vendorPendingPayment),
               vendorUtilPct,
               paymentStatus,
-              stateCode: STATE_MAP[stateCode] || stateCode
+              stateCode: stateName
             };
           });
 

@@ -8,8 +8,19 @@
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-ALTER TABLE nicsi_erp.app_user
-    ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM pg_tables WHERE schemaname = 'nicsi_erp' AND tablename = 'app_user'
+    ) THEN
+        ALTER TABLE nicsi_erp.app_user ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
+    END IF;
+    IF EXISTS (
+        SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'app_user'
+    ) THEN
+        ALTER TABLE public.app_user ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
+    END IF;
+END $$;
 
 ALTER TABLE auth.users
     ADD COLUMN IF NOT EXISTS requires_password_change BOOLEAN NOT NULL DEFAULT FALSE;
@@ -17,12 +28,13 @@ ALTER TABLE auth.users
     ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- MD and PM are first-class authentication roles, not aliases for unrelated roles.
-INSERT INTO auth.roles (code, name, description) VALUES
-    ('MD', 'Managing Director', 'Organisation-wide project oversight and Project Manager provisioning'),
-    ('PM', 'Project Manager', 'Project Manager portfolio access')
+INSERT INTO auth.roles (id, code, name, description) VALUES
+    (gen_random_uuid(), 'MD', 'Managing Director', 'Organisation-wide project oversight and Project Manager provisioning'),
+    (gen_random_uuid(), 'PM', 'Project Manager', 'Project Manager portfolio access')
 ON CONFLICT (code) DO UPDATE
 SET name = EXCLUDED.name,
     description = EXCLUDED.description;
+
 
 -- Managing Directors can oversee business data and provision PM accounts.
 INSERT INTO auth.role_permissions (role_id, permission_id)
@@ -47,10 +59,14 @@ JOIN auth.permissions p ON p.code IN (
 WHERE r.code = 'PM'
 ON CONFLICT DO NOTHING;
 
--- Legacy code soft-deleted app_user rows but left their primary keys behind.
--- Finish those requested deletions in every identity-related table so the same
--- username can be provisioned again without a hidden duplicate collision.
+CREATE SCHEMA IF NOT EXISTS notification;
+CREATE TABLE IF NOT EXISTS notification.notifications (
+    id UUID PRIMARY KEY,
+    user_id UUID
+);
+
 DELETE FROM notification.notifications n
+
 USING auth.users u, nicsi_erp.app_user a
 WHERE n.user_id = u.id
   AND u.username = a.username
@@ -71,7 +87,13 @@ INSERT INTO auth.users (
     failed_login_count, mfa_enabled, requires_password_change, is_deleted, version
 )
 SELECT
-    gen_random_uuid(), a.username, lower(a.email),
+    gen_random_uuid(), a.username,
+    CASE 
+        WHEN EXISTS (SELECT 1 FROM auth.users u WHERE lower(u.email) = lower(a.email) AND u.username != a.username)
+             OR COUNT(*) OVER (PARTITION BY lower(a.email)) > 1
+        THEN lower(a.username) || '@nicsi.gov.in'
+        ELSE lower(COALESCE(a.email, a.username || '@nicsi.gov.in'))
+    END,
     CASE WHEN a.password LIKE '$2%' THEN a.password ELSE crypt(a.password, gen_salt('bf', 12)) END,
     a.full_name, COALESCE(a.is_active, TRUE), FALSE, 0, TRUE, TRUE, FALSE, 0
 FROM nicsi_erp.app_user a

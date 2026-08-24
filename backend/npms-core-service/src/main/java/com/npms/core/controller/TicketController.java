@@ -151,6 +151,7 @@ public class TicketController {
         String type      = (String) body.get("ticketType");
         String priority  = (String) body.get("priority");
         String stageRef  = (String) body.get("stageRef");
+        String assignedTo = (String) body.get("assignedTo");
 
         if (headerId == null) throw new NpmsBaseException("VALIDATION", "headerId is required.");
         if (title == null || title.isBlank()) throw new NpmsBaseException("VALIDATION", "title is required.");
@@ -160,6 +161,13 @@ public class TicketController {
         ProjectTicket ticket = ticketService.createTicket(
                 headerId, title, desc, type, priority, stageRef,
                 scope.username(), actingAs);
+
+        if (assignedTo != null && !assignedTo.isBlank()) {
+            try {
+                ticket = ticketService.assignTicket(
+                        ticket.getId(), assignedTo.trim(), scope.username(), actingAs, "Assigned upon creation");
+            } catch (Exception ignored) {}
+        }
 
         return ResponseEntity.ok(Map.of(
                 "success", true,

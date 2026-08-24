@@ -71,8 +71,7 @@ INSERT INTO public.app_user (username, password, full_name, email, role, prj_mgr
 VALUES
     ('superadmin', '$2a$10$e0MYzXyjpJS7Pd0RVvHwHeFz8N7N0wFpM7gV/8W9m1B4JqK4x2K.S', 'Super Administrator', 'superadmin@nicsi.gov.in', 'SUPER_ADMIN', NULL, 'system', TRUE, NULL, 'North Zone', 'Administrator'),
     ('md.alok_tiwari', '$2a$10$e0MYzXyjpJS7Pd0RVvHwHeFz8N7N0wFpM7gV/8W9m1B4JqK4x2K.S', 'Alok Tiwari', 'md.nicsi@gov.in', 'MD', NULL, 'superadmin', TRUE, NULL, 'North Zone', 'Managing Director'),
-    ('pm_atul_rastogi', '$2a$10$e0MYzXyjpJS7Pd0RVvHwHeFz8N7N0wFpM7gV/8W9m1B4JqK4x2K.S', 'Atul Rastogi', 'atul.rastogi@nicsi.gov.in', 'PM', 1626, 'md.alok_tiwari', TRUE, 'md.alok_tiwari', 'North Zone', 'Senior Project Manager'),
-    ('atul', '$2a$10$e0MYzXyjpJS7Pd0RVvHwHeFz8N7N0wFpM7gV/8W9m1B4JqK4x2K.S', 'Atul Rastogi', 'atul.rastogi@nicsi.gov.in', 'PM', 1626, 'md.alok_tiwari', TRUE, 'md.alok_tiwari', 'North Zone', 'Senior Project Manager')
+    ('pm_atul_rastogi', '$2a$10$e0MYzXyjpJS7Pd0RVvHwHeFz8N7N0wFpM7gV/8W9m1B4JqK4x2K.S', 'Atul Rastogi', 'atul.rastogi@nicsi.gov.in', 'PM', 1626, 'md.alok_tiwari', TRUE, 'md.alok_tiwari', 'North Zone', 'Senior Project Manager')
 ON CONFLICT (username) DO UPDATE SET
     prj_mgr_id = EXCLUDED.prj_mgr_id,
     role = EXCLUDED.role,
@@ -126,6 +125,9 @@ SELECT
     p.hod_email,
     p.nic_cord_emailid,
     p.staff_email_id,
+    NULL::text AS ministry,
+    NULL::text AS department,
+    COALESCE(pmdb.prj_typ_description, p.prj_type, 'General Service') AS project_category,
     COALESCE(inv.pen_amt, 0) AS total_penalty_amt,
     GREATEST(0, COALESCE(p.amount_received, 0) - (COALESCE(p.po_amount, 0) - COALESCE(inv.pen_amt, 0))) AS nicsi_commission,
     RIGHT(p.project_cd, 2) AS state_code
@@ -134,7 +136,11 @@ LEFT JOIN (
     SELECT project_id, SUM(pen_amt) AS pen_amt 
     FROM public.xx_nic_pm_invoice_list 
     GROUP BY project_id
-) inv ON p.project_id = inv.project_id;
+) inv ON p.project_id = inv.project_id
+LEFT JOIN (
+    SELECT DISTINCT prj_mgr_id, prj_typ_code, prj_typ_description 
+    FROM public.xx_nic_pmdb_project_list
+) pmdb ON (p.prj_mgr_id = pmdb.prj_mgr_id AND p.prj_type = pmdb.prj_typ_code);
 
 CREATE OR REPLACE VIEW public.purchase_order_list AS
 SELECT * FROM public.xx_nic_pm_po_list;
@@ -154,6 +160,30 @@ SELECT * FROM public.xx_nic_pm_invoice_list;
 -- 4. Create compatibility views in nicsi_erp schema pointing to public schema
 CREATE SCHEMA IF NOT EXISTS nicsi_erp;
 
+DO $$
+BEGIN
+    EXECUTE 'DROP VIEW IF EXISTS nicsi_erp.app_user CASCADE';
+    EXECUTE 'DROP TABLE IF EXISTS nicsi_erp.app_user CASCADE';
+    EXECUTE 'DROP VIEW IF EXISTS nicsi_erp.project_manager CASCADE';
+    EXECUTE 'DROP TABLE IF EXISTS nicsi_erp.project_manager CASCADE';
+    EXECUTE 'DROP VIEW IF EXISTS nicsi_erp.project_list CASCADE';
+    EXECUTE 'DROP TABLE IF EXISTS nicsi_erp.project_list CASCADE';
+    EXECUTE 'DROP VIEW IF EXISTS nicsi_erp.purchase_order_list CASCADE';
+    EXECUTE 'DROP TABLE IF EXISTS nicsi_erp.purchase_order_list CASCADE';
+    EXECUTE 'DROP VIEW IF EXISTS nicsi_erp.tax_invoice_list CASCADE';
+    EXECUTE 'DROP TABLE IF EXISTS nicsi_erp.tax_invoice_list CASCADE';
+    EXECUTE 'DROP VIEW IF EXISTS nicsi_erp.bill_desk_list CASCADE';
+    EXECUTE 'DROP TABLE IF EXISTS nicsi_erp.bill_desk_list CASCADE';
+    EXECUTE 'DROP VIEW IF EXISTS nicsi_erp.project_type_summary CASCADE';
+    EXECUTE 'DROP TABLE IF EXISTS nicsi_erp.project_type_summary CASCADE';
+    EXECUTE 'DROP VIEW IF EXISTS nicsi_erp.invoice_list CASCADE';
+    EXECUTE 'DROP TABLE IF EXISTS nicsi_erp.invoice_list CASCADE';
+    EXECUTE 'DROP VIEW IF EXISTS nicsi_erp.customer_master_list CASCADE';
+    EXECUTE 'DROP TABLE IF EXISTS nicsi_erp.customer_master_list CASCADE';
+EXCEPTION WHEN OTHERS THEN
+    NULL;
+END $$;
+
 CREATE OR REPLACE VIEW nicsi_erp.app_user AS SELECT * FROM public.app_user;
 CREATE OR REPLACE VIEW nicsi_erp.project_manager AS SELECT * FROM public.project_manager;
 CREATE OR REPLACE VIEW nicsi_erp.project_list AS SELECT * FROM public.project_list;
@@ -162,3 +192,4 @@ CREATE OR REPLACE VIEW nicsi_erp.tax_invoice_list AS SELECT * FROM public.tax_in
 CREATE OR REPLACE VIEW nicsi_erp.bill_desk_list AS SELECT * FROM public.bill_desk_list;
 CREATE OR REPLACE VIEW nicsi_erp.project_type_summary AS SELECT * FROM public.project_type_summary;
 CREATE OR REPLACE VIEW nicsi_erp.invoice_list AS SELECT * FROM public.invoice_list;
+

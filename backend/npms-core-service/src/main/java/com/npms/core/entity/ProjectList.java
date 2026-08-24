@@ -109,6 +109,9 @@ public class ProjectList {
     @Column(name = "total_penalty_amt")
     private BigDecimal totalPenaltyAmt;
 
+    @Column(name = "is_pmc_monitored")
+    private Boolean isPmcMonitored;
+
     @Transient
     public BigDecimal getCommissionPercentage() {
         if (amountReceived == null || amountReceived.compareTo(BigDecimal.ZERO) == 0) return BigDecimal.ZERO;
@@ -191,4 +194,6 @@ public class ProjectList {
     public void setNicsiCommission(BigDecimal nicsiCommission) { this.nicsiCommission = nicsiCommission; }
     public BigDecimal getTotalPenaltyAmt() { return totalPenaltyAmt; }
     public void setTotalPenaltyAmt(BigDecimal totalPenaltyAmt) { this.totalPenaltyAmt = totalPenaltyAmt; }
+    public Boolean getIsPmcMonitored() { return isPmcMonitored != null && isPmcMonitored; }
+    public void setIsPmcMonitored(Boolean isPmcMonitored) { this.isPmcMonitored = isPmcMonitored; }
 }

@@ -6,12 +6,12 @@ WORKDIR /app
 COPY . .
 
 # Package the service
-RUN mvn clean package -pl npms-auth-service -am -DskipTests
+RUN mvn clean package -pl npms-core-service -am -DskipTests
 
 # Runtime stage
 FROM eclipse-temurin:21-jre
 WORKDIR /app
-COPY --from=build /app/npms-auth-service/target/npms-auth-service-*.jar app.jar
-EXPOSE 8081
+COPY --from=build /app/npms-core-service/target/npms-core-service-*.jar app.jar
+EXPOSE 8083
 ENV JAVA_OPTS="-XX:MaxRAMPercentage=75.0"
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]

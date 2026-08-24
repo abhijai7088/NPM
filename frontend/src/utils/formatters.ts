@@ -1,17 +1,35 @@
 export const STATE_MAP: Record<string, string> = {
-  'WB': 'West Bengal', 'UP': 'Uttar Pradesh', 'ND': 'New Delhi',
-  'MH': 'Maharashtra', 'ML': 'Meghalaya', 'TS': 'Telangana',
-  'GJ': 'Gujarat',     'AP': 'Andhra Pradesh', 'MP': 'Madhya Pradesh',
-  'PB': 'Punjab',      'HR': 'Haryana',         'DL': 'Delhi',
-  'KA': 'Karnataka',   'TN': 'Tamil Nadu',       'RJ': 'Rajasthan',
-  'HP': 'Himachal Pradesh', 'KL': 'Kerala',      'OR': 'Odisha',
-  'BR': 'Bihar',       'JK': 'J&K',              'AS': 'Assam',
-  'CH': 'Chandigarh',  'JH': 'Jharkhand',        'UK': 'Uttarakhand',
-  'MN': 'Manipur',     'TR': 'Tripura',          'CG': 'Chhattisgarh',
-  'GA': 'Goa',         'SK': 'Sikkim',           'MZ': 'Mizoram',
-  'NL': 'Nagaland',    'AR': 'Arunachal Pradesh','PY': 'Puducherry',
-  'NA': 'Others',
+  'ND': 'New Delhi', 'DL': 'Delhi', 'TS': 'Telangana', 'AP': 'Andhra Pradesh',
+  'PY': 'Puducherry', 'UP': 'Uttar Pradesh', 'MH': 'Maharashtra', 'WB': 'West Bengal',
+  'LD': 'Lakshadweep', 'KL': 'Kerala', 'HR': 'Haryana', 'TN': 'Tamil Nadu',
+  'AS': 'Assam', 'MP': 'Madhya Pradesh', 'JH': 'Jharkhand', 'CG': 'Chhattisgarh',
+  'RJ': 'Rajasthan', 'GJ': 'Gujarat', 'CH': 'Chandigarh', 'MN': 'Manipur',
+  'PB': 'Punjab', 'JK': 'Jammu & Kashmir', 'ML': 'Meghalaya', 'GA': 'Goa',
+  'BR': 'Bihar', 'MZ': 'Mizoram', 'OR': 'Odisha', 'OD': 'Odisha',
+  'AR': 'Arunachal Pradesh', 'KA': 'Karnataka', 'HP': 'Himachal Pradesh',
+  'UK': 'Uttarakhand', 'UT': 'Uttarakhand', 'TR': 'Tripura', 'AN': 'Andaman & Nicobar',
+  'SK': 'Sikkim', 'LA': 'Ladakh', 'NL': 'Nagaland', 'DD': 'Daman & Diu',
+  'DN': 'Dadra & Nagar Haveli', 'NA': 'Others',
 };
+
+export function extractStateCode(projectCode?: string | null): string {
+  if (!projectCode) return 'NA';
+  const clean = String(projectCode).trim().toUpperCase();
+  if (clean.length < 2) return 'NA';
+  const lastTwo = clean.slice(-2);
+  if (/^[A-Z]{2}$/.test(lastTwo)) {
+    return lastTwo;
+  }
+  return 'NA';
+}
+
+export function getStateName(projectCodeOrStateCode?: string | null): string {
+  if (!projectCodeOrStateCode) return 'Others';
+  const clean = String(projectCodeOrStateCode).trim().toUpperCase();
+  if (STATE_MAP[clean]) return STATE_MAP[clean];
+  const sc = extractStateCode(clean);
+  return STATE_MAP[sc] || sc || 'Others';
+}
 
 export function formatCurrency(amount: number): string {
   if (amount >= 10000000) return `₹${(amount/10000000).toFixed(2)} Cr`;

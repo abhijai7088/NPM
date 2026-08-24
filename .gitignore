@@ -27,3 +27,6 @@
 !.vscode/extensions.json
 .idea
 .DS_Store
+
+# Large database dumps
+database/*.sql

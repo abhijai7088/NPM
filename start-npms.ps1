@@ -20,7 +20,37 @@ $ErrorActionPreference = "Stop"
 $RootDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $RootDir
 
+# Load environment variables from .env if it exists
+if (Test-Path "$RootDir\.env") {
+    Write-Host "==> Loading environment variables from .env..." -ForegroundColor Cyan
+    Get-Content "$RootDir\.env" | ForEach-Object {
+        $line = $_.Trim()
+        if ($line -and -not $line.StartsWith("#")) {
+            if ($line -match '^([^=]+)=(.*)$') {
+                $key = $Matches[1].Trim()
+                $val = $Matches[2].Trim()
+                if ($val -match '^"(.*)"$') { $val = $Matches[1] }
+                elseif ($val -match "^'(.*)'$") { $val = $Matches[1] }
+                [Environment]::SetEnvironmentVariable($key, $val)
+            }
+        }
+    }
+}
+
+$dbPort = if ($env:DB_PORT) { [int]$env:DB_PORT } else { 5433 }
+
 Write-Host "==> NPMS root: $RootDir" -ForegroundColor Cyan
+
+# --- Step 0: Free port 8081 if in use by host or stale process -------------
+$existingAuth = Get-NetTCPConnection -LocalPort 8081 -State Listen -ErrorAction SilentlyContinue
+if ($existingAuth) {
+    $proc = Get-Process -Id $existingAuth.OwningProcess -ErrorAction SilentlyContinue
+    if ($proc -and ($proc.Name -eq "java" -or $proc.Name -eq "javaw" -or $proc.Name -eq "node")) {
+        Write-Host "==> Port 8081 is in use by PID $($existingAuth.OwningProcess) ($($proc.Name)) -- stopping it." -ForegroundColor Yellow
+        Stop-Process -Id $existingAuth.OwningProcess -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+    }
+}
 
 # --- Step 1: Docker infrastructure + auth-service ---------------------------
 Write-Host "==> Starting Docker services (postgres, redis, zookeeper, kafka, mailhog, auth-service)..." -ForegroundColor Cyan
@@ -31,16 +61,25 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # --- Step 2: Wait for Postgres to be healthy and host port reachable ---------
-Write-Host "==> Waiting for Postgres to become healthy and reachable on port 5433..." -ForegroundColor Cyan
-$maxAttempts = 30
+Write-Host "==> Waiting for Postgres to complete initialization and become reachable on port $dbPort..." -ForegroundColor Cyan
+$maxAttempts = 90
 $attempt = 0
 $healthy = $false
 while ($attempt -lt $maxAttempts) {
-    $status = docker inspect --format='{{.State.Health.Status}}' npms_postgres 2>$null
-    if ($status -eq "healthy") {
+    # Check if the initialization script is running inside the container logs
+    $oldEAP = $ErrorActionPreference
+    $ErrorActionPreference = "SilentlyContinue"
+    $logs = docker logs npms_postgres 2>&1
+    $ErrorActionPreference = $oldEAP
+    $isInitializing = $logs -match "/docker-entrypoint-initdb.d/"
+    $isComplete = $logs -match "PostgreSQL init process complete; ready for start up."
+    
+    if ($isInitializing -and -not $isComplete) {
+        # Still executing schema dump, wait
+    } else {
         try {
             $tcp = New-Object System.Net.Sockets.TcpClient
-            $async = $tcp.BeginConnect("localhost", 5433, $null, $null)
+            $async = $tcp.BeginConnect("localhost", $dbPort, $null, $null)
             $wait = $async.AsyncWaitHandle.WaitOne(1000, $false)
             if ($wait -and $tcp.Connected) {
                 $tcp.EndConnect($async)
@@ -49,34 +88,25 @@ while ($attempt -lt $maxAttempts) {
                 break
             }
             $tcp.Close()
-            Write-Host "Postgres container healthy, but host port 5433 unreachable. Recreating container..." -ForegroundColor Yellow
-            docker compose up -d --force-recreate postgres
         } catch {
-            Write-Host "Postgres container healthy, but host port 5433 unreachable. Recreating container..." -ForegroundColor Yellow
-            docker compose up -d --force-recreate postgres
+            # ignore
         }
     }
     Start-Sleep -Seconds 2
     $attempt++
 }
 if (-not $healthy) {
-    Write-Host "Postgres did not become healthy/reachable in time. Check 'docker compose logs postgres'." -ForegroundColor Red
+    Write-Host "Postgres failed to become ready in time." -ForegroundColor Red
     exit 1
 }
-Write-Host "==> Postgres is healthy and reachable on port 5433." -ForegroundColor Green
+Write-Host "==> Postgres is healthy and reachable on port $dbPort." -ForegroundColor Green
 
 # --- Step 2.5: Dynamic ingestion & public schema consolidation --------------
 Write-Host "==> Running NPMS Database dynamic ingestion & schema consolidation..." -ForegroundColor Cyan
-python "$RootDir\database\dynamic_ingest.py" --host localhost --port 5433 --dbname npms_db --user npms_user --password npms_local_pass_2026
-
+python "$RootDir\database\ingest_all_databases.py"
+python "$RootDir\database\recreate_project_list_view.py"
 
 # --- Step 3: core-service environment variables (host-side, for Maven) ------
-# NOTE: MAIL_HOST / MAIL_PORT are intentionally NOT set here. core-service
-# hardcodes its own Gmail SMTP settings in application.yml. auth-service
-# (Dockerized) reads its real Gmail settings from the .env FILE directly.
-# Do not add mail vars to this shell -- they would leak into 'docker compose'
-# commands run afterward in the same session and silently break OTP email.
-# Ensure JAVA_HOME is set and valid for Maven
 if (-not $env:JAVA_HOME -or -not (Test-Path $env:JAVA_HOME)) {
     $candidateJdks = @(
         "$env:USERPROFILE\.jdks\temurin-24.0.2",
@@ -94,28 +124,31 @@ if (-not $env:JAVA_HOME -or -not (Test-Path $env:JAVA_HOME)) {
     }
 }
 
-$env:DB_HOST = "localhost"
-$env:DB_PORT = "5433"
-$env:DB_NAME = "npms_db"
-$env:DB_USER = "npms_user"
-$env:DB_PASSWORD = "npms_local_pass_2026"
-$env:REDIS_HOST = "localhost"
-$env:REDIS_PORT = "6379"
-$env:KAFKA_BOOTSTRAP = "localhost:9092"
-$env:OLLAMA_BASE_URL = "http://localhost:11434"
-$env:JWT_PRIVATE_KEY_PATH = "classpath:keys/private.pem"
-$env:JWT_PUBLIC_KEY_PATH = "classpath:keys/public.pem"
-$env:JWT_ACCESS_EXPIRY_MINUTES = "15"
-$env:JWT_REFRESH_EXPIRY_DAYS = "7"
-$env:APP_BASE_URL = "http://localhost:3000"
-$env:APP_ENV = "local"
+if (-not $env:DB_HOST) { $env:DB_HOST = "localhost" }
+if (-not $env:DB_PORT) { $env:DB_PORT = "5433" }
+if (-not $env:DB_NAME) { $env:DB_NAME = "npms_db" }
+if (-not $env:DB_USER) { $env:DB_USER = "npms_user" }
+if (-not $env:DB_PASSWORD) { $env:DB_PASSWORD = "npms_local_pass_2026" }
+if (-not $env:REDIS_HOST) { $env:REDIS_HOST = "localhost" }
+if (-not $env:REDIS_PORT) { $env:REDIS_PORT = "6379" }
+if (-not $env:KAFKA_BOOTSTRAP) { $env:KAFKA_BOOTSTRAP = "localhost:9092" }
+if (-not $env:OLLAMA_BASE_URL) { $env:OLLAMA_BASE_URL = "http://localhost:11434" }
+if (-not $env:JWT_PRIVATE_KEY_PATH) { $env:JWT_PRIVATE_KEY_PATH = "classpath:keys/private.pem" }
+if (-not $env:JWT_PUBLIC_KEY_PATH) { $env:JWT_PUBLIC_KEY_PATH = "classpath:keys/public.pem" }
+if (-not $env:JWT_ACCESS_EXPIRY_MINUTES) { $env:JWT_ACCESS_EXPIRY_MINUTES = "15" }
+if (-not $env:JWT_REFRESH_EXPIRY_DAYS) { $env:JWT_REFRESH_EXPIRY_DAYS = "7" }
+if (-not $env:APP_BASE_URL) { $env:APP_BASE_URL = "http://localhost:3000" }
+if (-not $env:APP_ENV) { $env:APP_ENV = "local" }
 
 # --- Step 4: Free port 8083 if a stale core-service is still holding it ----
 $existing = Get-NetTCPConnection -LocalPort 8083 -State Listen -ErrorAction SilentlyContinue
 if ($existing) {
-    Write-Host "==> Port 8083 is in use by PID $($existing.OwningProcess) -- stopping it." -ForegroundColor Yellow
-    Stop-Process -Id $existing.OwningProcess -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 2
+    $proc = Get-Process -Id $existing.OwningProcess -ErrorAction SilentlyContinue
+    if ($proc -and ($proc.Name -eq "java" -or $proc.Name -eq "javaw" -or $proc.Name -eq "node")) {
+        Write-Host "==> Port 8083 is in use by PID $($existing.OwningProcess) ($($proc.Name)) -- stopping it." -ForegroundColor Yellow
+        Stop-Process -Id $existing.OwningProcess -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+    }
 }
 
 # --- Step 5: Build + run core-service in its own window ---------------------
@@ -129,24 +162,28 @@ if ($LASTEXITCODE -ne 0) {
 }
 Pop-Location
 
+$javaHomeClean = if ($env:JAVA_HOME) { $env:JAVA_HOME.TrimEnd('\') } else { "" }
 Write-Host "==> Launching core-service (port 8083) in a new window..." -ForegroundColor Cyan
 Start-Process powershell -ArgumentList @(
     '-NoExit', '-Command',
     "cd '$RootDir\backend'; " +
-    "`$env:JAVA_HOME='$env:JAVA_HOME'; " +
-    "`$env:DB_HOST='localhost'; `$env:DB_PORT='5433'; `$env:DB_NAME='npms_db'; `$env:DB_USER='npms_user'; `$env:DB_PASSWORD='npms_local_pass_2026'; " +
-    "`$env:REDIS_HOST='localhost'; `$env:REDIS_PORT='6379'; `$env:KAFKA_BOOTSTRAP='localhost:9092'; `$env:OLLAMA_BASE_URL='http://localhost:11434'; " +
-    "`$env:JWT_PRIVATE_KEY_PATH='classpath:keys/private.pem'; `$env:JWT_PUBLIC_KEY_PATH='classpath:keys/public.pem'; " +
-    "`$env:JWT_ACCESS_EXPIRY_MINUTES='15'; `$env:JWT_REFRESH_EXPIRY_DAYS='7'; `$env:APP_BASE_URL='http://localhost:3000'; `$env:APP_ENV='local'; " +
+    "`$env:JAVA_HOME='$javaHomeClean'; " +
+    "`$env:DB_HOST='$($env:DB_HOST)'; `$env:DB_PORT='$($env:DB_PORT)'; `$env:DB_NAME='$($env:DB_NAME)'; `$env:DB_USER='$($env:DB_USER)'; `$env:DB_PASSWORD='$($env:DB_PASSWORD)'; " +
+    "`$env:REDIS_HOST='$($env:REDIS_HOST)'; `$env:REDIS_PORT='$($env:REDIS_PORT)'; `$env:KAFKA_BOOTSTRAP='$($env:KAFKA_BOOTSTRAP)'; `$env:OLLAMA_BASE_URL='$($env:OLLAMA_BASE_URL)'; " +
+    "`$env:JWT_PRIVATE_KEY_PATH='$($env:JWT_PRIVATE_KEY_PATH)'; `$env:JWT_PUBLIC_KEY_PATH='$($env:JWT_PUBLIC_KEY_PATH)'; " +
+    "`$env:JWT_ACCESS_EXPIRY_MINUTES='$($env:JWT_ACCESS_EXPIRY_MINUTES)'; `$env:JWT_REFRESH_EXPIRY_DAYS='$($env:JWT_REFRESH_EXPIRY_DAYS)'; `$env:APP_BASE_URL='$($env:APP_BASE_URL)'; `$env:APP_ENV='$($env:APP_ENV)'; " +
     "mvn spring-boot:run -pl npms-core-service"
 )
 
 # --- Step 6: Launch frontend dev server in its own window -------------------
 $existingFrontend = Get-NetTCPConnection -LocalPort 5195 -State Listen -ErrorAction SilentlyContinue
 if ($existingFrontend) {
-    Write-Host "==> Port 5195 is in use by PID $($existingFrontend.OwningProcess) -- stopping it." -ForegroundColor Yellow
-    Stop-Process -Id $existingFrontend.OwningProcess -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 2
+    $proc = Get-Process -Id $existingFrontend.OwningProcess -ErrorAction SilentlyContinue
+    if ($proc -and ($proc.Name -eq "java" -or $proc.Name -eq "javaw" -or $proc.Name -eq "node")) {
+        Write-Host "==> Port 5195 is in use by PID $($existingFrontend.OwningProcess) ($($proc.Name)) -- stopping it." -ForegroundColor Yellow
+        Stop-Process -Id $existingFrontend.OwningProcess -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+    }
 }
 
 Write-Host "==> Launching frontend dev server (port 5195) in a new window..." -ForegroundColor Cyan

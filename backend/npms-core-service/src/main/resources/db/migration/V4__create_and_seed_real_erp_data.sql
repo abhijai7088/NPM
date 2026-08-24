@@ -6,8 +6,20 @@
 CREATE SCHEMA IF NOT EXISTS nicsi_erp;
 SET search_path = nicsi_erp;
 
-CREATE TABLE IF NOT EXISTS project_list (
-    header_id BIGINT,
+-- Clean up any conflicting views in nicsi_erp before creating tables
+DROP VIEW IF EXISTS nicsi_erp.app_user CASCADE;
+DROP VIEW IF EXISTS nicsi_erp.project_manager CASCADE;
+DROP VIEW IF EXISTS nicsi_erp.project_list CASCADE;
+DROP VIEW IF EXISTS nicsi_erp.purchase_order_list CASCADE;
+DROP VIEW IF EXISTS nicsi_erp.tax_invoice_list CASCADE;
+DROP VIEW IF EXISTS nicsi_erp.bill_desk_list CASCADE;
+DROP VIEW IF EXISTS nicsi_erp.project_type_summary CASCADE;
+DROP VIEW IF EXISTS nicsi_erp.invoice_list CASCADE;
+DROP VIEW IF EXISTS nicsi_erp.customer_master_list CASCADE;
+
+DROP VIEW IF EXISTS nicsi_erp.project_list CASCADE;
+CREATE TABLE IF NOT EXISTS nicsi_erp.project_list (
+    header_id BIGINT PRIMARY KEY,
     project_id BIGINT,
     prj_mgr_id BIGINT,
     project_cd TEXT,
@@ -40,9 +52,7 @@ CREATE TABLE IF NOT EXISTS project_list (
     nicsi_commission NUMERIC(20,2) GENERATED ALWAYS AS (GREATEST(0, amount_received - (po_amount - total_penalty_amt))) STORED
 );
 
-ALTER TABLE project_list ADD PRIMARY KEY (header_id);
-
-INSERT INTO project_list (header_id,project_id,prj_mgr_id,project_cd,prj_nm,customer_name,prj_budget_no,amount_received,no_of_po,po_amount,no_of_inv_billdesk,no_of_exp_invocie,total_invoice_amount,total_amount_paid,no_of_tax_invoice,total_tax_invocie_amount,project_abp,created_on,cust_id,prj_type,user_email,mobile_number,hod_email,nic_cord_emailid,staff_email_id,total_penalty_amt,ministry,department,project_category,state_code) VALUES
+INSERT INTO nicsi_erp.project_list (header_id,project_id,prj_mgr_id,project_cd,prj_nm,customer_name,prj_budget_no,amount_received,no_of_po,po_amount,no_of_inv_billdesk,no_of_exp_invocie,total_invoice_amount,total_amount_paid,no_of_tax_invoice,total_tax_invocie_amount,project_abp,created_on,cust_id,prj_type,user_email,mobile_number,hod_email,nic_cord_emailid,staff_email_id,total_penalty_amt,ministry,department,project_category,state_code) VALUES
 (1203098,45917,1626,'S242317ZOWB','All India Institute of Hygiene & Public Health','All India Institute of Hygiene & Public Health',164291.0,164291.0,1,156468.0,0,0,0,0,0,0.0,164291.0,'07-JUL-26',2127982,'ZO','Subrata.m@gov.in',NULL,NULL,'Subrata.m@gov.in','paor-nicsi@nic.in',0.0,NULL,NULL,NULL,'WB'),
 (1203102,48463,1626,'S252444ZOUP','Remote Sensing Applications Centre, Govt. of UP','Remote Sensing Applications Centre, Govt. of UP',85937.0,85937.0,1,81844.8,0,0,0,0,0,0.0,85937.0,'07-JUL-26',2131217,'ZO','sshukla.77668@gov.in',NULL,'hod-email@nic.in',NULL,'pdml-nicsi@nic.in',0.0,NULL,NULL,NULL,'UP'),
 (1203282,47759,1626,'P251745ZOUP','U P Projects Corporation Ltd.','U P Projects Corporation Ltd.',267624.0,267624.0,1,239806.46,1,0,0,0,0,0.0,267624.0,'07-JUL-26',2145415,'ZO','cgm.uppcl@nic.in',NULL,NULL,'hod-email@nic.in','pdml-nicsi@nic.in',0.0,NULL,NULL,NULL,'UP'),
@@ -95,7 +105,9 @@ INSERT INTO project_list (header_id,project_id,prj_mgr_id,project_cd,prj_nm,cust
 (1203967,46232,1626,'S250238ZOUP','Varanasi Development Authority','Varanasi Development Authority',44604.0,44610.0,1,42480.0,8,5,2869,2869,5,3117.32,41494.0,'07-JUL-26',2246677,'ZO','vdavaranasi@gmail.com',NULL,NULL,'vdavaranasi@gmail.com','pdml-nicsi@nic.in',8.0,NULL,NULL,NULL,'UP')
 ON CONFLICT (header_id) DO NOTHING;
 
-CREATE TABLE IF NOT EXISTS purchase_order_list (
+DROP VIEW IF EXISTS nicsi_erp.purchase_order_list CASCADE;
+CREATE TABLE IF NOT EXISTS nicsi_erp.purchase_order_list (
+    header_id BIGINT PRIMARY KEY,
     project_id BIGINT,
     project_no TEXT,
     prj_mgr_id BIGINT,
@@ -107,13 +119,10 @@ CREATE TABLE IF NOT EXISTS purchase_order_list (
     todate DATE,
     total NUMERIC(20,2),
     approval_status TEXT,
-    created_date DATE,
-    header_id BIGINT
+    created_date DATE
 );
 
-ALTER TABLE purchase_order_list ADD PRIMARY KEY (header_id);
-
-INSERT INTO purchase_order_list (project_id,project_no,prj_mgr_id,vendor_id,vendor_name,final_po_no,po_date,frdate,todate,total,approval_status,created_date,header_id) VALUES
+INSERT INTO nicsi_erp.purchase_order_list (project_id,project_no,prj_mgr_id,vendor_id,vendor_name,final_po_no,po_date,frdate,todate,total,approval_status,created_date,header_id) VALUES
 (46061,'C250068ZOND',1626,703686,'ZOHO CORPORATION PRIVATE LIMITED','O2500208','05-MAY-25','21-APR-25','31-MAR-26',5001626.67,'DISPATCHED','07-JUL-26',6136316),
 (47482,'S251470ZOHP',1626,703686,'ZOHO CORPORATION PRIVATE LIMITED','O2501560','21-NOV-25','12-NOV-25','31-OCT-26',330279.64,'DISPATCHED','07-JUL-26',6137466),
 (47514,'P251502ZOMH',1626,703686,'ZOHO CORPORATION PRIVATE LIMITED','O2501632','28-NOV-25','19-NOV-25','31-OCT-26',706230.0,'DISPATCHED','07-JUL-26',6137508),
@@ -165,8 +174,9 @@ INSERT INTO purchase_order_list (project_id,project_no,prj_mgr_id,vendor_id,vend
 (46869,'S250865ZOMH',1626,703686,'ZOHO CORPORATION PRIVATE LIMITED','O2600526','29-JUN-26','08-JUN-26','31-MAR-27',4563768.0,'DISPATCHED','07-JUL-26',6182660)
 ON CONFLICT (header_id) DO NOTHING;
 
-CREATE TABLE IF NOT EXISTS tax_invoice_list (
-    header_id BIGINT,
+DROP VIEW IF EXISTS nicsi_erp.tax_invoice_list CASCADE;
+CREATE TABLE IF NOT EXISTS nicsi_erp.tax_invoice_list (
+    header_id BIGINT PRIMARY KEY,
     project_id BIGINT,
     prj_mgr_id BIGINT,
     cust_id BIGINT,
@@ -188,9 +198,7 @@ CREATE TABLE IF NOT EXISTS tax_invoice_list (
     created_date DATE
 );
 
-ALTER TABLE tax_invoice_list ADD PRIMARY KEY (header_id);
-
-INSERT INTO tax_invoice_list (header_id,project_id,prj_mgr_id,cust_id,cust_gstin_no,prj_gstn_no,project_no,po_no,ampono,user_bill_no,bill_date,bill_status,billing_period_from,billing_period_to,supp_inv_num,totalamount,bill_type,state_description,irn_no,created_date) VALUES
+INSERT INTO nicsi_erp.tax_invoice_list (header_id,project_id,prj_mgr_id,cust_id,cust_gstin_no,prj_gstn_no,project_no,po_no,ampono,user_bill_no,bill_date,bill_status,billing_period_from,billing_period_to,supp_inv_num,totalamount,bill_type,state_description,irn_no,created_date) VALUES
 (24030306,45566,1626,2153403,'18AAACN9991J2ZQ','17AAACN9991J1ZT','S241971ZOML','O2500209',NULL,'MAR/SC/2526/7360','31-MAR-26','FINAL','JUL-25','JUL-25',805525260431,233428,'Invoice','Meghalaya','e23c489eccf8e876532975034113d5cf5b651f4c6f9d2b33f21806eecd4c8541','07-JUL-26'),
 (24032262,46223,1626,2132192,NULL,NULL,'S250229ZOTR','O2500584',NULL,'FEB/SC/2526/226','02-FEB-26','FINAL','AUG-25','AUG-25',805525260863,176,'Invoice','Tripura',NULL,'07-JUL-26'),
 (24034335,45835,1626,2144816,'07AAAAN2333C2Z6','07AAAAN2333C2Z6','C242238ZOND','O2500005',NULL,'FEB/SC/2526/2805','13-FEB-26','FINAL','AUG-25','AUG-25',805525260544,54764,'Invoice','Delhi','12e19bef5d395f5ef51019c83304d014c6703837b661192973ee28ab27840486','07-JUL-26'),
@@ -303,8 +311,9 @@ INSERT INTO tax_invoice_list (header_id,project_id,prj_mgr_id,cust_id,cust_gstin
 (24286819,46869,1626,2269644,'27AAATT3620R1Z1','27AAATT3620R1Z1','S250865ZOMH','O2500971',NULL,'FEB/SC/2526/2946','14-FEB-26','FINAL','SEP-25','SEP-25',805525260848,991,'Invoice','Maharashtra','fb73c59ac0102faae9bf6b6b0852cc3f9b5c3f1c0f76c3a613d964e08e01e6bd','07-JUL-26')
 ON CONFLICT (header_id) DO NOTHING;
 
-CREATE TABLE IF NOT EXISTS bill_desk_list (
-    header_id BIGINT,
+DROP VIEW IF EXISTS nicsi_erp.bill_desk_list CASCADE;
+CREATE TABLE IF NOT EXISTS nicsi_erp.bill_desk_list (
+    header_id BIGINT PRIMARY KEY,
     project_id BIGINT,
     prj_mgr_id BIGINT,
     project_no TEXT,
@@ -325,9 +334,7 @@ CREATE TABLE IF NOT EXISTS bill_desk_list (
     created_date DATE
 );
 
-ALTER TABLE bill_desk_list ADD PRIMARY KEY (header_id);
-
-INSERT INTO bill_desk_list (header_id,project_id,prj_mgr_id,project_no,final_po_no,bill_month,vendor_id,vendor_name,invoice_no,invoice_date,received_date,invoice_amount,invoice_num,invoice_amount_bk,amount_paid,invoice_status,objection_remarks,status,created_date) VALUES
+INSERT INTO nicsi_erp.bill_desk_list (header_id,project_id,prj_mgr_id,project_no,final_po_no,bill_month,vendor_id,vendor_name,invoice_no,invoice_date,received_date,invoice_amount,invoice_num,invoice_amount_bk,amount_paid,invoice_status,objection_remarks,status,created_date) VALUES
 (19671346,45782,1626,'S242186ZOMP','O2401761',NULL,703686,'ZOHO CORPORATION PRIVATE LIMITED',805525260926,'27-NOV-25','13-FEB-26',25564,805525260926,24698,24698,30,NULL,'Payment Done','07-JUL-26'),
 (19671363,45566,1626,'S241971ZOML','O2500209',NULL,703686,'ZOHO CORPORATION PRIVATE LIMITED',805525260985,'28-NOV-25','16-FEB-26',222209,805525260985,214677,214677,34,NULL,'Payment Done','07-JUL-26'),
 (19671367,45566,1626,'S241971ZOML','O2500209',NULL,703686,'ZOHO CORPORATION PRIVATE LIMITED',805525261437,'09-JAN-26','16-FEB-26',223020,805525261437,215460,215460,34,NULL,'Payment Done','07-JUL-26'),
@@ -440,8 +447,9 @@ INSERT INTO bill_desk_list (header_id,project_id,prj_mgr_id,project_no,final_po_
 (19692994,45554,1626,'S241959ZOMH','O2500050',NULL,703686,'ZOHO CORPORATION PRIVATE LIMITED',805525260409,'30-AUG-25','09-DEC-25',19596,805525260409,18932,18932,30,NULL,'Payment Done','07-JUL-26')
 ON CONFLICT (header_id) DO NOTHING;
 
-CREATE TABLE IF NOT EXISTS project_type_summary (
-    header_id BIGINT,
+DROP VIEW IF EXISTS nicsi_erp.project_type_summary CASCADE;
+CREATE TABLE IF NOT EXISTS nicsi_erp.project_type_summary (
+    header_id BIGINT PRIMARY KEY,
     prj_mgr_id BIGINT,
     prj_mgr_nm TEXT,
     prj_typ_code TEXT,
@@ -450,9 +458,7 @@ CREATE TABLE IF NOT EXISTS project_type_summary (
     created_date DATE
 );
 
-ALTER TABLE project_type_summary ADD PRIMARY KEY (header_id);
-
-INSERT INTO project_type_summary (header_id,prj_mgr_id,prj_mgr_nm,prj_typ_code,prj_typ_description,noofproject,created_date) VALUES
+INSERT INTO nicsi_erp.project_type_summary (header_id,prj_mgr_id,prj_mgr_nm,prj_typ_code,prj_typ_description,noofproject,created_date) VALUES
 (12281,1626,'Atul Rastogi','EP','E-Procurment',1,'07-JUL-26'),
 (12283,1626,'Atul Rastogi','BA','BAS Services',181,'07-JUL-26'),
 (12288,1626,'Atul Rastogi','SP','ShastriPdc',3,'07-JUL-26'),
@@ -471,8 +477,9 @@ INSERT INTO project_type_summary (header_id,prj_mgr_id,prj_mgr_nm,prj_typ_code,p
 (12427,1626,'Atul Rastogi','DC','Data center',64,'07-JUL-26')
 ON CONFLICT (header_id) DO NOTHING;
 
-CREATE TABLE IF NOT EXISTS invoice_list (
-    header_id BIGINT,
+DROP VIEW IF EXISTS nicsi_erp.invoice_list CASCADE;
+CREATE TABLE IF NOT EXISTS nicsi_erp.invoice_list (
+    header_id BIGINT PRIMARY KEY,
     project_id BIGINT,
     project_no TEXT,
     prj_mgr_id BIGINT,
@@ -496,9 +503,7 @@ CREATE TABLE IF NOT EXISTS invoice_list (
     created_date DATE
 );
 
-ALTER TABLE invoice_list ADD PRIMARY KEY (header_id);
-
-INSERT INTO invoice_list (header_id,project_id,project_no,prj_mgr_id,managername,pono,vendor_id,vendor_name,invoice_num,invoice_date,gl_date,invoice_amount,amount_paid,unpaid,pen_amt,objection,finalunpaid,invoice_type,project_abp,gem_flag,msmeven_name,created_date) VALUES
+INSERT INTO nicsi_erp.invoice_list (header_id,project_id,project_no,prj_mgr_id,managername,pono,vendor_id,vendor_name,invoice_num,invoice_date,gl_date,invoice_amount,amount_paid,unpaid,pen_amt,objection,finalunpaid,invoice_type,project_abp,gem_flag,msmeven_name,created_date) VALUES
 (20684921,45476,'S241882ZOWB',1626,'Atul Rastogi','O2401497',703686,'ZOHO CORPORATION PRIVATE LIMITED',805525260028,'15-APR-25','06-MAY-25',5956,5956,0,0,NULL,0,'Services',188719,NULL,NULL,'07-JUL-26'),
 (20743590,45666,'S242071ZOKL',1626,'Atul Rastogi','O2500018',703686,'ZOHO CORPORATION PRIVATE LIMITED',805525260947,'28-NOV-25','31-MAR-26',14490,14490,0,0,NULL,0,'Services',258894,NULL,NULL,'07-JUL-26'),
 (20743591,45666,'S242071ZOKL',1626,'Atul Rastogi','O2500018',703686,'ZOHO CORPORATION PRIVATE LIMITED',805525261160,'28-DEC-25','31-MAR-26',14490,14490,0,76,NULL,-76,'Services',258894,NULL,NULL,'07-JUL-26'),
