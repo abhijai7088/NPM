@@ -310,15 +310,15 @@ export const LoginPage = () => {
         <div className="login-form-card">
           {/* Header */}
           <div className="login-form-header">
-            <div className="login-form-logo-group" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', margin: '0 auto 1.5rem' }}>
-              <img src="/emblem-india.svg" alt="State Emblem of India" style={{ height: '48px', width: 'auto' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-              <div style={{ width: '1px', height: '36px', backgroundColor: '#cbd5e1' }}></div>
-              <img src="/nicsi-logo-v2.png" alt="NICSI Logo" style={{ height: '36px', width: 'auto', objectFit: 'contain' }} onError={(e) => {
+            <div className="login-form-logo-group" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2rem', margin: '0 auto 2rem', padding: '0.5rem 0' }}>
+              <img src="/emblem-india.svg" alt="State Emblem of India" style={{ height: '64px', width: 'auto' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              <div style={{ width: '1.5px', height: '44px', backgroundColor: '#e2e8f0' }}></div>
+              <img src="/nicsi-logo-v2.png" alt="NICSI Logo" style={{ height: '48px', width: 'auto', objectFit: 'contain' }} onError={(e) => {
                 (e.target as HTMLImageElement).src = '/nicsi-logo-dark.jpg';
               }} />
             </div>
-            <h2>Official Sign-In</h2>
-            <p>NICSI Project Monitoring System (NPMS)</p>
+            <h2>Sign in to NPMS</h2>
+            <p>NICSI Project Monitoring System</p>
           </div>
 
           {error && (
@@ -411,7 +411,7 @@ export const LoginPage = () => {
               </div>
 
               <div className="login-form-meta" style={{ justifyContent: 'flex-end' }}>
-                <button type="button" onClick={() => { setView('forgot'); setError(''); setSuccess(''); }} className="forgot-link" style={{ background: 'none', border: 'none', cursor: 'pointer' }}>Forgot Password?</button>
+                <button type="button" onClick={() => { setView('forgot'); setError(''); setSuccess(''); }} className="forgot-link" style={{ background: 'none', border: 'none', cursor: 'pointer' }}>Forgot your password?</button>
               </div>
 
               <button
@@ -431,7 +431,7 @@ export const LoginPage = () => {
                       <polyline points="10 17 15 12 10 7"/>
                       <line x1="15" y1="12" x2="3" y2="12"/>
                     </svg>
-                    Sign In to Portal
+                    Sign in to NPMS
                   </>
                 )}
               </button>
@@ -539,14 +539,14 @@ export const LoginPage = () => {
           )}
 
           {/* Authorized access notice */}
-          <div className="login-security-note">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-            </svg>
-            <span>
-              Restricted access. Authorised NICSI officials only. All sign-in activity is logged and
-              monitored. Access is granted by the system administrator.
-            </span>
+          <div className="login-security-note" style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', background: '#f8fafc', border: '1px solid #e2e8f0', padding: '12px 16px', borderRadius: '8px', marginTop: '1.5rem' }}>
+            <span style={{ fontSize: '1rem', lineHeight: '1.2' }}>🔒</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', textAlign: 'left' }}>
+              <strong style={{ fontSize: '0.82rem', color: '#1e293b' }}>Authorized users only</strong>
+              <span style={{ fontSize: '0.75rem', color: '#64748b', lineHeight: '1.4' }}>
+                Sign-in activity is logged for security and audit purposes.
+              </span>
+            </div>
           </div>
 
           <div className="login-form-footer">

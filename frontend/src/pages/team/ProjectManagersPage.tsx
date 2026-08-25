@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { formatCurrency } from '../../utils/formatters';
@@ -28,6 +28,171 @@ interface PM {
   totalVendorPending: number;
   projectTypes?: string[];
 }
+
+// Custom dropdown filter with downward alignment and searching capabilities
+const SearchableDropdown: React.FC<{
+  label: string;
+  value: string;
+  onChange: (val: string) => void;
+  options: Array<{ value: string; label: string }>;
+  placeholder?: string;
+}> = ({ label, value, onChange, options, placeholder = 'Search...' }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Filter options list on matching search string
+  const filteredOptions = useMemo(() => {
+    return options.filter(opt =>
+      opt.label.toLowerCase().includes(search.toLowerCase())
+    );
+  }, [options, search]);
+
+  const selectedOption = options.find(opt => opt.value === value);
+
+  return (
+    <div className="pm-filter-group" ref={containerRef} style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+      <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#495057' }}>{label}</label>
+      
+      {/* Dropdown Toggle Trigger Button */}
+      <button
+        type="button"
+        onClick={() => {
+          setIsOpen(!isOpen);
+          setSearch('');
+        }}
+        style={{
+          width: '100%',
+          height: '38px',
+          padding: '0 12px',
+          background: '#ffffff',
+          border: '1px solid #cbd5e1',
+          borderRadius: '8px',
+          fontSize: '0.875rem',
+          textAlign: 'left',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          cursor: 'pointer',
+          color: selectedOption ? '#1f2937' : '#94a3b8',
+          outline: 'none',
+          boxShadow: isOpen ? '0 0 0 3px rgba(0, 51, 102, 0.1)' : 'none',
+          borderColor: isOpen ? '#003366' : '#cbd5e1',
+          transition: 'all 0.15s ease'
+        }}
+      >
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '90%' }}>
+          {selectedOption ? selectedOption.label : 'Select...'}
+        </span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2.5" style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }}>
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </button>
+
+      {/* Dropdown Options List (Always opens downwards!) */}
+      {isOpen && (
+        <div style={{
+          position: 'absolute',
+          top: '100%',
+          left: 0,
+          right: 0,
+          marginTop: '4px',
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          borderRadius: '8px',
+          boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+          zIndex: 999,
+          maxHeight: '260px',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden'
+        }}>
+          {/* Inner Search Box */}
+          <div style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', background: '#f8fafc', flexShrink: 0 }}>
+            <div style={{ position: 'relative' }}>
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder={placeholder}
+                style={{
+                  width: '100%',
+                  height: '32px',
+                  padding: '0 8px 0 28px',
+                  borderRadius: '6px',
+                  border: '1px solid #cbd5e1',
+                  fontSize: '0.8rem',
+                  outline: 'none',
+                  boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)'
+                }}
+                onClick={e => e.stopPropagation()}
+              />
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }}>
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+            </div>
+          </div>
+
+          {/* Options Items */}
+          <div style={{ overflowY: 'auto', flex: 1, padding: '4px 0' }}>
+            {filteredOptions.length === 0 ? (
+              <div style={{ padding: '12px', fontSize: '0.8rem', color: '#94a3b8', textAlign: 'center' }}>
+                No matches found
+              </div>
+            ) : (
+              filteredOptions.map(opt => {
+                const isSelected = opt.value === value;
+                return (
+                  <div
+                    key={opt.value}
+                    onClick={() => {
+                      onChange(opt.value);
+                      setIsOpen(false);
+                    }}
+                    style={{
+                      padding: '8px 12px',
+                      fontSize: '0.8125rem',
+                      color: isSelected ? '#003366' : '#334155',
+                      background: isSelected ? '#f0f7ff' : 'transparent',
+                      fontWeight: isSelected ? 700 : 500,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      transition: 'background 0.1s ease'
+                    }}
+                    onMouseEnter={e => { if (!isSelected) e.currentTarget.style.backgroundColor = '#f8fafc'; }}
+                    onMouseLeave={e => { if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                  >
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {opt.label}
+                    </span>
+                    {isSelected && (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#003366" strokeWidth="3">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const ProjectManagersPage: React.FC = () => {
   const navigate = useNavigate();
@@ -383,27 +548,24 @@ export const ProjectManagersPage: React.FC = () => {
               className="btn btn-primary btn-sm"
               onClick={() => setShowForm(!showForm)}
             >
-              {showForm ? '✕ Close Form' : '+ Provision Project Manager'}
+              {showForm ? '✕ Close Form' : '+ Create Project Manager'}
             </button>
           )}
           <button
             className={`btn ${showFilters ? 'btn-navy' : 'btn-outline-navy'} btn-sm`}
             onClick={() => setShowFilters(!showFilters)}
           >
-            ⚡ Filter PM Roster {activeFiltersCount > 0 && `(${activeFiltersCount})`}
+            ⚡ PM's Filter {activeFiltersCount > 0 && `(${activeFiltersCount})`}
           </button>
-          <span className="pm-count-badge">
-            {filteredManagers.length} of {managers.length} PMs
-          </span>
         </div>
       </div>
 
       {/* Roster Aggregate Stats Cards */}
       <div className="pm-stats-grid">
         <div className="pm-stat-card">
-          <div className="pm-stat-label">TOTAL ROSTER PMS</div>
+          <div className="pm-stat-label">Total Active PMs</div>
           <div className="pm-stat-value">{org.totalManagers || managers.length || 0}</div>
-          <div className="pm-stat-sub">{assignedIds.size} Provisioned Accounts</div>
+          <div className="pm-stat-sub">{assignedIds.size} Active Accounts</div>
         </div>
         <div className="pm-stat-card">
           <div className="pm-stat-label">TOTAL PROJECTS</div>
@@ -431,61 +593,69 @@ export const ProjectManagersPage: React.FC = () => {
 
       {/* PM Account Provisioning Form (MD / Admin only) */}
       {showForm && (
-        <div className="card pm-form-card" style={{ marginBottom: '1.5rem' }}>
-          <div className="card-header">
-            <h3>Provision New Project Manager Account</h3>
-            <span className="text-muted" style={{ fontSize: '0.8rem' }}>Create RBAC login credentials for a PM profile</span>
+        <div className="card pm-form-card" style={{ marginBottom: '2rem', border: '1px solid #cbd5e1', boxShadow: '0 4px 20px rgba(0, 51, 102, 0.08)', borderRadius: '12px', overflow: 'hidden' }}>
+          <div className="card-header" style={{ background: '#f8fafc', padding: '1.25rem 1.5rem', borderBottom: '1px solid #e2e8f0' }}>
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#003366', margin: 0 }}>Create New Project Manager Account</h3>
+            <p className="text-muted" style={{ fontSize: '0.8rem', margin: '4px 0 0 0', color: '#64748b' }}>Create RBAC login credentials for a PM profile</p>
           </div>
 
           {msg && (
-            <div className={`alert ${msg.type === 'ok' ? 'alert-success' : 'alert-error'}`} style={{ margin: '1rem' }}>
+            <div className={`alert ${msg.type === 'ok' ? 'alert-success' : 'alert-error'}`} style={{ margin: '1.5rem 1.5rem 0 1.5rem' }}>
               {msg.text}
             </div>
           )}
 
-          <form onSubmit={submitPm} style={{ padding: '1rem 1.25rem' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
-              <div>
-                <label className="form-label">Select PM Profile *</label>
+          <form onSubmit={submitPm} style={{ padding: '1.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1.5rem', marginBottom: '1.5rem' }}>
+              
+              {/* Profile Selection */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155' }}>Select PM Profile *</label>
                 <select
                   className="form-control"
                   value={form.prjMgrId}
                   onChange={e => onSelectProfile(e.target.value)}
                   required
+                  style={{ height: '42px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 10px', fontSize: '0.875rem' }}
                 >
                   <option value="">-- Choose from ERP PM List --</option>
                   {profiles.map(p => (
                     <option key={p.prjMgrId} value={p.prjMgrId}>
-                      {p.fullName} ({p.zone || 'Zone'}) {assignedIds.has(String(p.prjMgrId)) ? '✓ Provisioned' : ''}
+                      {p.fullName} ({p.zone || 'Zone'}) {assignedIds.has(String(p.prjMgrId)) ? '✓ Created' : ''}
                     </option>
                   ))}
                 </select>
               </div>
 
-              <div>
-                <label className="form-label">Full Name *</label>
+              {/* Full Name */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155' }}>Full Name *</label>
                 <input
                   className="form-control"
                   value={form.fullName}
                   onChange={e => setForm({ ...form, fullName: e.target.value })}
                   placeholder="e.g. Atul Rastogi"
                   required
+                  style={{ height: '42px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '0.875rem' }}
                 />
               </div>
 
-              <div>
-                <label className="form-label">Username *</label>
+              {/* Username */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155' }}>Username *</label>
                 <input
                   className="form-control"
                   value={form.username}
                   onChange={e => setForm({ ...form, username: e.target.value })}
                   placeholder="e.g. atul_rastogi"
                   required
+                  style={{ height: '42px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '0.875rem' }}
                 />
               </div>
 
-              <div>
-                <label className="form-label">NICSI Email *</label>
+              {/* NICSI Email */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155' }}>NICSI Email *</label>
                 <input
                   type="email"
                   className="form-control"
@@ -493,11 +663,13 @@ export const ProjectManagersPage: React.FC = () => {
                   onChange={e => setForm({ ...form, email: e.target.value })}
                   placeholder="atul@nicsi.gov.in"
                   required
+                  style={{ height: '42px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '0.875rem' }}
                 />
               </div>
 
-              <div>
-                <label className="form-label">Initial Password *</label>
+              {/* Password */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', gridColumn: 'span 2' }}>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155' }}>Initial Password *</label>
                 <input
                   type="password"
                   className="form-control"
@@ -505,14 +677,16 @@ export const ProjectManagersPage: React.FC = () => {
                   onChange={e => setForm({ ...form, password: e.target.value })}
                   placeholder="••••••••"
                   required
+                  style={{ height: '42px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '0.875rem' }}
                 />
               </div>
+
             </div>
 
-            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowForm(false)}>Cancel</button>
-              <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>
-                {saving ? 'Provisioning...' : 'Provision Account'}
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', borderTop: '1px solid #e2e8f0', paddingTop: '1.25rem' }}>
+              <button type="button" className="btn btn-outline-navy btn-sm" onClick={() => setShowForm(false)} style={{ padding: '0.5rem 1.25rem', borderRadius: '6px' }}>Cancel</button>
+              <button type="submit" className="btn btn-primary btn-sm" disabled={saving} style={{ padding: '0.5rem 1.5rem', borderRadius: '6px', background: '#003366', borderColor: '#003366', color: '#fff', fontWeight: 600 }}>
+                {saving ? 'Creating...' : 'Create Account'}
               </button>
             </div>
           </form>
@@ -520,60 +694,96 @@ export const ProjectManagersPage: React.FC = () => {
       )}
 
       {/* Roster Filters Drawer */}
-      {showFilters && (
-        <div className="pm-filter-panel card" style={{ marginBottom: '1.5rem' }}>
-          <div className="pm-filter-group" style={{ flex: 2 }}>
-            <label>Search Roster</label>
-            <input
-              className="form-control"
-              placeholder="Search by PM Name, Email, PRJ_MGR_ID..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
+      {showFilters && (() => {
+        const zoneOptions = [
+          { value: 'ALL', label: 'All Zones' },
+          { value: 'North Zone', label: 'North Zone' },
+          { value: 'South Zone', label: 'South Zone' },
+          { value: 'East Zone', label: 'East Zone' },
+          { value: 'West Zone', label: 'West Zone' }
+        ];
+
+        const typeOptions = [
+          { value: 'ALL', label: 'All Project Categories' },
+          ...allProjectTypes.map(t => ({ value: t, label: String(t) }))
+        ];
+
+        const statusOptions = [
+          { value: 'ALL', label: 'All Statuses' },
+          { value: 'ACTIVE_ACCOUNT', label: 'Active Accounts Only' },
+          { value: 'UNASSIGNED', label: 'Needs Account Creation' },
+          { value: 'HAS_VENDOR_DUES', label: 'Has Vendor Pending Dues' }
+        ];
+
+        return (
+          <div className="pm-filter-panel card" style={{
+            marginBottom: '1.5rem',
+            padding: '1.25rem 1.5rem',
+            background: '#ffffff',
+            borderRadius: '12px',
+            border: '1px solid #e2e8f0',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.03)',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: '1.25rem',
+            alignItems: 'flex-end'
+          }}>
+            <div className="pm-filter-group" style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+              <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#495057' }}>Search Roster</label>
+              <input
+                className="form-control"
+                placeholder="Search by PM Name, Email, PRJ_MGR_ID..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                style={{
+                  height: '38px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  padding: '0 12px',
+                  fontSize: '0.875rem'
+                }}
+              />
+            </div>
+
+            <SearchableDropdown
+              label="Zone Filter"
+              value={zoneFilter}
+              onChange={setZoneFilter}
+              options={zoneOptions}
+              placeholder="Search zones..."
             />
-          </div>
 
-          <div className="pm-filter-group">
-            <label>Zone Filter</label>
-            <select className="form-control" value={zoneFilter} onChange={e => setZoneFilter(e.target.value)}>
-              <option value="ALL">All Zones</option>
-              <option value="North Zone">North Zone</option>
-              <option value="South Zone">South Zone</option>
-              <option value="East Zone">East Zone</option>
-              <option value="West Zone">West Zone</option>
-            </select>
-          </div>
+            <SearchableDropdown
+              label="Project Category"
+              value={typeFilter}
+              onChange={setTypeFilter}
+              options={typeOptions}
+              placeholder="Search categories..."
+            />
 
-          <div className="pm-filter-group">
-            <label>Project Category</label>
-            <select className="form-control" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
-              <option value="ALL">All Project Categories</option>
-              {allProjectTypes.map(t => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-          </div>
+            <SearchableDropdown
+              label="Account Status"
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={statusOptions}
+              placeholder="Search statuses..."
+            />
 
-          <div className="pm-filter-group">
-            <label>Account Status</label>
-            <select className="form-control" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-              <option value="ALL">All Statuses</option>
-              <option value="ACTIVE_ACCOUNT">Provisioned Accounts Only</option>
-              <option value="UNASSIGNED">Needs Provisioning</option>
-              <option value="HAS_VENDOR_DUES">Has Vendor Pending Dues</option>
-            </select>
+            {activeFiltersCount > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gridColumn: '1 / -1', borderTop: '1px dashed #e2e8f0', paddingTop: '0.75rem', marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={resetFilters}
+                  style={{ color: '#dc2626', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }}
+                >
+                  ✕ Reset Filters
+                </button>
+              </div>
+            )}
           </div>
-
-          {activeFiltersCount > 0 && (
-            <button
-              className="btn btn-ghost btn-sm"
-              style={{ alignSelf: 'flex-end', marginBottom: 2 }}
-              onClick={resetFilters}
-            >
-              Reset Filters
-            </button>
-          )}
-        </div>
-      )}
+        );
+      })()}
 
       {/* Dedicated Corporate Unassigned Projects Pool Banner */}
       {unassignedPool && unassignedPool.projectCount > 0 && (
@@ -670,17 +880,12 @@ export const ProjectManagersPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Category Chips */}
-              {pm.projectTypes && pm.projectTypes.length > 0 && (
-                <div className="pm-card-compact__tags">
-                  {pm.projectTypes.slice(0, 3).map((pt, idx) => (
-                    <span key={idx} className="pm-type-chip">{pt}</span>
-                  ))}
-                  {pm.projectTypes.length > 3 && (
-                    <span className="pm-type-chip pm-type-chip--more">+{pm.projectTypes.length - 3} more</span>
-                  )}
-                </div>
-              )}
+              {/* Category Chips - replaced with dynamic project type count */}
+              <div className="pm-card-compact__tags">
+                <span className="pm-type-chip" style={{ background: '#f1f5f9', color: '#003366', border: '1px solid #cbd5e1', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', fontSize: '0.72rem' }}>
+                  📂 {pm.projectTypes ? pm.projectTypes.length : 0} Project Types
+                </span>
+              </div>
 
               {/* Card Footer Action */}
               <div className="pm-card-compact__footer">

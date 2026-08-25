@@ -360,23 +360,25 @@ export const PoExpiryRevolvingCarousel: React.FC<PoExpiryRevolvingCarouselProps>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 6, borderTop: '1px solid #f1f3f5', fontSize: '0.75rem', color: '#6c757d' }}>
                 <span>PO: <strong style={{ color: '#006699' }}>{formatCurrency(p.poAmount || 0)}</strong></span>
-                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       navigate(`/projects?id=${p.projectCode}&noticeType=PO_EXPIRY`);
                     }}
                     style={{
-                      background: isExpired ? '#dc354515' : '#ffc10720',
-                      border: `1px solid ${isExpired ? '#dc354540' : '#ffc10760'}`,
-                      color: isExpired ? '#dc3545' : '#b58500',
-                      borderRadius: 4,
-                      padding: '3px 8px',
-                      fontSize: '0.7rem',
+                      background: 'none',
+                      border: 'none',
+                      color: '#006699',
+                      padding: 0,
+                      fontSize: '0.75rem',
                       fontWeight: 700,
                       cursor: 'pointer',
-                      transition: 'all 0.15s'
+                      fontFamily: 'inherit',
+                      transition: 'color 0.15s'
                     }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.textDecoration = 'underline'; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.textDecoration = 'none'; }}
                     title="Generate official PO Expiry / Extension Notice"
                   >
                     ⚡ Send Notice

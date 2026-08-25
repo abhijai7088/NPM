@@ -248,25 +248,34 @@ export const AppShell: React.FC = () => {
       {/* ── Sidebar ── */}
       <aside className={`sidebar ${mobileOpen ? 'mobile-open' : ''}`}>
         {/* Logo */}
-        <div className="sidebar-logo">
-          <div className="sidebar-logo__icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', padding: '0.5rem 0' }}>
-            <img src="/nicsi-logo-v2.png" alt="NICSI Logo" style={{ maxWidth: '100%', height: 'auto', maxHeight: '40px', objectFit: 'contain' }} onError={(e) => {
+        <div
+          className="sidebar-logo"
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: collapsed ? '16px 8px' : '24px 20px',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+            minHeight: 'auto',
+            boxSizing: 'border-box',
+            width: '100%',
+            position: 'relative'
+          }}
+        >
+          <img
+            src="/nicsi-logo-v2.png"
+            alt="NICSI Logo"
+            style={{
+              width: '100%',
+              maxWidth: collapsed ? '36px' : '220px',
+              height: 'auto',
+              display: 'block',
+              objectFit: 'contain'
+            }}
+            onError={(e) => {
               (e.target as HTMLImageElement).style.display = 'none';
-            }} />
-          </div>
-
-          <button
-            className="sidebar-collapse-btn"
-            onClick={() => setCollapsed(v => !v)}
-            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              {collapsed
-                ? <polyline points="9 18 15 12 9 6"/>
-                : <polyline points="15 18 9 12 15 6"/>
-              }
-            </svg>
-          </button>
+            }}
+          />
         </div>
 
         {/* Navigation */}
@@ -306,28 +315,7 @@ export const AppShell: React.FC = () => {
           )}
         </nav>
 
-        {/* User Profile */}
-        <div className="sidebar-user">
-          <div className="sidebar-user__avatar">
-            {user?.fullName?.[0] ?? 'U'}
-          </div>
-          {!collapsed && (
-            <div className="sidebar-user__info">
-              <span className="sidebar-user__name">{user?.fullName ?? (lang === 'en' ? 'Admin User' : 'एडमिन यूजर')}</span>
-              <span className="sidebar-user__role-badge">{roleLabel}</span>
-              <span className="sidebar-user__role">{user?.zone ? `${user.zone}` : ''}</span>
-            </div>
-          )}
-          {!collapsed && (
-            <button className="sidebar-user__logout" onClick={handleLogout} title="Sign Out">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                <polyline points="16 17 21 12 16 7"/>
-                <line x1="21" y1="12" x2="9" y2="12"/>
-              </svg>
-            </button>
-          )}
-        </div>
+
       </aside>
 
       {/* ── Main Area ── */}
@@ -335,13 +323,6 @@ export const AppShell: React.FC = () => {
         {/* Government Top Bar - Slim Premium Blue Strip */}
         <div className="govt-bar">
           <div className="govt-bar__left">
-            {/* State Emblem of India */}
-            <img
-              src="/emblem-india.svg"
-              alt="State Emblem of India"
-              className="govt-bar__emblem"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-            />
             {/* Indian Flag */}
             <img
               src="/flag-india.svg"
@@ -349,39 +330,7 @@ export const AppShell: React.FC = () => {
               className="govt-bar__flag"
               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
             />
-            <span className="govt-bar__gov-text">{lang === 'en' ? 'Government of India' : 'भारत सरकार'}</span>
-
-            <span className="govt-bar__sep-v"></span>
-
-            {/* MeitY official logo */}
-            <div className="govt-bar__logo-chip" title="Ministry of Electronics & Information Technology">
-              <img
-                src="/meity-logo.svg"
-                alt="MeitY"
-                className="govt-bar__logo-img govt-bar__logo-img--meity"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-              />
-            </div>
-
-            {/* Digital India official logo */}
-            <div className="govt-bar__logo-chip" title="Digital India">
-              <img
-                src="/digital-india.svg"
-                alt="Digital India"
-                className="govt-bar__logo-img"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-              />
-            </div>
-
-            {/* Swachh Bharat official logo */}
-            <div className="govt-bar__logo-chip govt-bar__logo-chip--hide-md" title="Swachh Bharat Mission">
-              <img
-                src="/swachh-bharat.svg"
-                alt="Swachh Bharat"
-                className="govt-bar__logo-img"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-              />
-            </div>
+            <span className="govt-bar__gov-text">भारत सरकार | Government of India</span>
           </div>
 
           <div className="govt-bar__right">
@@ -401,6 +350,39 @@ export const AppShell: React.FC = () => {
 
         {/* TopBar */}
         <header className="topbar">
+          {/* Burger Button for collapsing/expanding sidebar */}
+          <button
+            className="topbar-hamburger-btn"
+            onClick={() => setCollapsed(v => !v)}
+            title={collapsed ? (lang === 'en' ? 'Expand Sidebar' : 'नेविगेशन बढ़ाएं') : (lang === 'en' ? 'Collapse Sidebar' : 'नेविगेशन सिकोड़ें')}
+            aria-label="Toggle Sidebar"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+
+          {/* Ministry and Digital India logos on the left */}
+          <div className="topbar-logos">
+            <img
+              src="/meity-logo.svg"
+              alt="Ministry of Electronics & Information Technology"
+              className="topbar-logo-img topbar-logo-img--meity"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+            />
+            <span className="topbar-logos__divider"></span>
+            <img
+              src="/digital-india.svg"
+              alt="Digital India"
+              className="topbar-logo-img topbar-logo-img--di"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+            />
+          </div>
+
+          <span className="topbar__sep-v"></span>
+
           <div className="topbar-left">
             <div className="topbar-breadcrumb">
               <span className="topbar-breadcrumb__home">NPMS</span>
@@ -411,21 +393,6 @@ export const AppShell: React.FC = () => {
             </div>
           </div>
 
-          <div className="topbar-search">
-            <div className="input-icon-wrapper" style={{ width: '280px' }}>
-              <span className="icon-left">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                </svg>
-              </span>
-              <input
-                type="text"
-                className="form-input has-icon-left"
-                placeholder={lang === 'en' ? 'Search projects, clients…' : 'प्रोजेक्ट, क्लाइंट खोजें...'}
-                style={{ fontSize: '0.875rem', padding: '0.5rem 1rem 0.5rem 2.75rem' }}
-              />
-            </div>
-          </div>
 
           <div className="topbar-right">
             <div style={{ position: 'relative' }} ref={notifRef}>
@@ -525,6 +492,21 @@ export const AppShell: React.FC = () => {
               )}
             </div>
 
+            {/* Search Pill Input on the right, beside user card */}
+            <div className="topbar-search-pill">
+              <input
+                type="text"
+                className="topbar-search-pill__input"
+                placeholder={lang === 'en' ? 'Search here...' : 'यहाँ खोजें...'}
+              />
+              <span className="topbar-search-pill__icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="11" cy="11" r="8"/>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+              </span>
+            </div>
+
             <div className="topbar-user">
               <div className="topbar-user__avatar">
                 {user?.fullName?.[0] ?? 'A'}
@@ -538,6 +520,16 @@ export const AppShell: React.FC = () => {
                 </span>
               </div>
             </div>
+
+            {/* Logout Button */}
+            <button className="topbar-logout-button" onClick={handleLogout}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/>
+                <line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+              <span>{lang === 'en' ? 'Logout' : 'लॉग आउट'}</span>
+            </button>
           </div>
         </header>
 

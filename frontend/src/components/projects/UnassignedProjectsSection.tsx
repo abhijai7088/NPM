@@ -132,7 +132,13 @@ export const UnassignedProjectsSection: React.FC<Props> = ({ onAssigned }) => {
       const res = await axios.put(`/api/v1/projects/${headerId}/toggle-pmc`);
       if (res.data?.success) {
         const isMonitored = res.data.isPmcMonitored;
-        setMessage({ type: 'success', text: res.data.message });
+        let msg = res.data.message;
+        if (msg === 'Project added to PMC Control Tower oversight' || msg === 'Project assigned to PMC Control Tower oversight') {
+          msg = 'Project assigned to PMC monitoring';
+        } else if (msg === 'Project removed from PMC Control Tower oversight') {
+          msg = 'Project removed from PMC monitoring';
+        }
+        setMessage({ type: 'success', text: msg });
         const updateList = (prev: ProjectItem[]) =>
           prev.map(p => p.headerId === headerId ? { ...p, isPmcMonitored: isMonitored } : p);
 
@@ -204,7 +210,7 @@ export const UnassignedProjectsSection: React.FC<Props> = ({ onAssigned }) => {
   };
 
   const getPmName = (pmId: number | null) => {
-    if (!pmId) return 'Unassigned Pool';
+    if (!pmId) return 'Unassigned Ticket';
     const found = projectManagers.find(p => p.prjMgrId === pmId);
     return found ? found.fullName : `PM #${pmId}`;
   };
@@ -231,11 +237,11 @@ export const UnassignedProjectsSection: React.FC<Props> = ({ onAssigned }) => {
               NICSI PM Allocation & PMC Tower Desk
             </h3>
             <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '2px 10px', borderRadius: '9999px', background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>
-              {unassignedProjects.length} Unassigned In Pool
+              {unassignedProjects.length} Unassigned Ticket
             </span>
           </div>
           <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '6px 0 0 0' }}>
-            Executive Oversight: Allocate projects to PMs or add to PMC Control Tower oversight with end-to-end database synchronization.
+            Assign projects to Project Managers or add projects to PMC monitoring for centralized oversight.
           </p>
         </div>
 
@@ -250,7 +256,7 @@ export const UnassignedProjectsSection: React.FC<Props> = ({ onAssigned }) => {
                 color: activeTab === 'unassigned' ? '#ffffff' : '#64748b'
               }}
             >
-              Unassigned Pool ({unassignedProjects.length})
+              Unassigned Ticket ({unassignedProjects.length})
             </button>
             <button
               onClick={() => { setActiveTab('reassign'); setSelectedHeaderIds([]); }}
@@ -260,7 +266,7 @@ export const UnassignedProjectsSection: React.FC<Props> = ({ onAssigned }) => {
                 color: activeTab === 'reassign' ? '#ffffff' : '#64748b'
               }}
             >
-              Reassign Active Portfolio
+              Transfer Assigned Projects
             </button>
           </div>
 
@@ -319,7 +325,7 @@ export const UnassignedProjectsSection: React.FC<Props> = ({ onAssigned }) => {
             onChange={e => setBulkPmId(e.target.value ? Number(e.target.value) : '')}
             style={{ background: '#ffffff', border: '1px solid #cbd5e1', color: '#1e293b', fontSize: '0.8rem', borderRadius: '6px', padding: '0.4rem 0.75rem', outline: 'none', width: '220px' }}
           >
-            <option value="">-- Bulk Select PM --</option>
+            <option value="">-- Select Project Manager --</option>
             {projectManagers.map(pm => (
               <option key={pm.prjMgrId} value={pm.prjMgrId}>
                 {pm.fullName} ({pm.zone || 'North Zone'} - ID: {pm.prjMgrId})
@@ -353,11 +359,11 @@ export const UnassignedProjectsSection: React.FC<Props> = ({ onAssigned }) => {
         <div style={{ marginTop: '1rem', padding: '2.5rem 1rem', background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '8px', textAlign: 'center' }}>
           <ShieldCheck style={{ width: 36, height: 36, color: '#059669', margin: '0 auto 8px auto', opacity: 0.9 }} />
           <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#003366', margin: 0 }}>
-            {activeTab === 'unassigned' ? 'All Pool Projects Assigned!' : 'No Matching Projects Found'}
+            {activeTab === 'unassigned' ? 'All Unassigned Tickets Assigned!' : 'No Matching Projects Found'}
           </h4>
           <p style={{ fontSize: '0.78rem', color: '#64748b', margin: '4px 0 0 0' }}>
             {activeTab === 'unassigned'
-              ? 'There are currently no unassigned projects in the pool. Toggle to Reassign Active Portfolio to reallocate projects.'
+              ? 'There are currently no unassigned tickets. Toggle to Transfer Assigned Projects to reallocate projects.'
               : 'Try clearing your search query or choosing a different filter.'}
           </p>
         </div>
@@ -427,7 +433,7 @@ export const UnassignedProjectsSection: React.FC<Props> = ({ onAssigned }) => {
                         color: p.isPmcMonitored ? '#15803d' : '#64748b',
                         border: p.isPmcMonitored ? '1px solid #bbf7d0' : '1px solid #cbd5e1'
                       }}
-                      title="Click to toggle PMC Control Tower oversight"
+                      title="Click to toggle PMC monitoring"
                     >
                       {togglingPmcId === p.headerId ? (
                         <RefreshCw style={{ width: 11, height: 11, animation: 'spin 1s linear infinite' }} />

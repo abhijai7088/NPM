@@ -242,7 +242,7 @@ ${evidenceNote ? `- Supporting Note: ${evidenceNote}` : ''}
         });
         onSuccess();
       } else {
-        setErrorMsg(res.data?.message || 'Failed to create Management Ticket.');
+        setErrorMsg(res.data?.message || 'Failed to raise ticket.');
       }
     } catch (err: any) {
       setErrorMsg(err.response?.data?.message || 'Error communicating with ticket server.');
@@ -280,11 +280,11 @@ ${evidenceNote ? `- Supporting Note: ${evidenceNote}` : ''}
               <ShieldAlert size={22} style={{ color: '#60a5fa' }} />
             </div>
             <div>
-              <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, letterSpacing: '-0.01em' }}>
+              <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, letterSpacing: '-0.01em', color: '#ffffff' }}>
                 Create Management Ticket
               </h2>
-              <p style={{ margin: '2px 0 0 0', fontSize: '0.78rem', color: '#93c5fd' }}>
-                Governed management action for project oversight, SLA tracking, compliance, and auditability
+              <p style={{ margin: '2px 0 0 0', fontSize: '0.78rem', color: '#cbd5e1' }}>
+                Create a tracked action for a project, including the responsible person, deadline, and required outcome.
               </p>
             </div>
           </div>
@@ -343,13 +343,13 @@ ${evidenceNote ? `- Supporting Note: ${evidenceNote}` : ''}
               <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1.25rem', boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
                 <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#003366', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: 6 }}>
                   <Building2 size={16} style={{ color: '#00509d' }} />
-                  1. Project & Context
+                  1. Ticket Scope & Project
                 </div>
 
                 {/* Scope Selector */}
                 <div style={{ marginBottom: '1rem' }}>
                   <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: 6 }}>
-                    Governance Scope *
+                    Scope *
                   </label>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     {(['PROJECT', 'PM_PORTFOLIO', 'ORGANISATION'] as const).map(sc => (
@@ -365,7 +365,7 @@ ${evidenceNote ? `- Supporting Note: ${evidenceNote}` : ''}
                           cursor: 'pointer'
                         }}
                       >
-                        {sc === 'PROJECT' ? '🏢 Specific Project' : sc === 'PM_PORTFOLIO' ? '👤 PM Portfolio' : '🌐 Organisation-wide'}
+                        {sc === 'PROJECT' ? '🏢 Single Project' : sc === 'PM_PORTFOLIO' ? "👤 Project Manager's Projects" : '🌐 All Projects'}
                       </button>
                     ))}
                   </div>
@@ -375,7 +375,7 @@ ${evidenceNote ? `- Supporting Note: ${evidenceNote}` : ''}
                 {scope === 'PROJECT' && (
                   <div style={{ marginBottom: '1rem', position: 'relative' }}>
                     <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: 6 }}>
-                      Select Target Project *
+                      Select Project *
                     </label>
                     <input
                       type="text"
@@ -434,7 +434,7 @@ ${evidenceNote ? `- Supporting Note: ${evidenceNote}` : ''}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '0.75rem' }}>
                   <div>
                     <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4 }}>
-                      Related Record Type
+                      Related Record
                     </label>
                     <select
                       value={relatedRecordType}
@@ -450,7 +450,7 @@ ${evidenceNote ? `- Supporting Note: ${evidenceNote}` : ''}
                   </div>
                   <div>
                     <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4 }}>
-                      Related Reference # (Optional)
+                      Related Document / Record Number (Optional)
                     </label>
                     <input
                       type="text"
@@ -467,14 +467,14 @@ ${evidenceNote ? `- Supporting Note: ${evidenceNote}` : ''}
               <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1.25rem', boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
                 <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#003366', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: 6 }}>
                   <FileText size={16} style={{ color: '#00509d' }} />
-                  2. Action Details & Governance Categorization
+                  2. Issue & Required Action
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
                   {/* Category */}
                   <div>
                     <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4 }}>
-                      Ticket Type / Category *
+                      Issue Category *
                     </label>
                     <select
                       value={ticketCategory}
@@ -504,7 +504,7 @@ ${evidenceNote ? `- Supporting Note: ${evidenceNote}` : ''}
                   {/* Action Type */}
                   <div>
                     <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4 }}>
-                      Action Type *
+                      Required Action *
                     </label>
                     <select
                       value={actionType}
@@ -524,17 +524,17 @@ ${evidenceNote ? `- Supporting Note: ${evidenceNote}` : ''}
                   {/* Priority */}
                   <div>
                     <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4 }}>
-                      Priority & SLA Matrix *
+                      Priority & Response Time *
                     </label>
                     <select
                       value={priority}
                       onChange={e => setPriority(e.target.value as any)}
                       style={{ width: '100%', padding: '7px 10px', fontSize: '0.8rem', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#fff' }}
                     >
-                      <option value="CRITICAL">🔴 CRITICAL (SLA: 8 Hours)</option>
-                      <option value="HIGH">🟠 HIGH (SLA: 24 Hours)</option>
-                      <option value="MEDIUM">🟡 MEDIUM (SLA: 3 Days)</option>
-                      <option value="LOW">🟢 LOW (SLA: 7 Days)</option>
+                      <option value="CRITICAL">🔴 Critical — Response within 8 hours</option>
+                      <option value="HIGH">🟠 High — Response within 24 hours</option>
+                      <option value="MEDIUM">🟡 Medium — Response within 3 days</option>
+                      <option value="LOW">🟢 Low — Response within 7 days</option>
                     </select>
                   </div>
                 </div>
@@ -542,11 +542,11 @@ ${evidenceNote ? `- Supporting Note: ${evidenceNote}` : ''}
                 {/* Title */}
                 <div style={{ marginBottom: '1rem' }}>
                   <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4 }}>
-                    Action / Ticket Subject Title *
+                    Ticket Subject *
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. [PO-EXPIRY] Urgent Purchase Order extension required before expiration date"
+                    placeholder="e.g. Urgent Purchase Order extension required before expiration date"
                     value={title}
                     onChange={e => setTitle(e.target.value)}
                     style={{ width: '100%', padding: '8px 12px', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid #cbd5e1' }}
@@ -576,7 +576,7 @@ ${evidenceNote ? `- Supporting Note: ${evidenceNote}` : ''}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   <div>
                     <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#991b1b', display: 'block', marginBottom: 4 }}>
-                      Reason / Issue (Why is this ticket being raised?) *
+                      Issue Details — Why is this ticket being created? *
                     </label>
                     <textarea
                       rows={2}
@@ -589,7 +589,7 @@ ${evidenceNote ? `- Supporting Note: ${evidenceNote}` : ''}
 
                   <div>
                     <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0369a1', display: 'block', marginBottom: 4 }}>
-                      Required Action / Instructions (What must the assignee do?) *
+                      What Needs to Be Done? *
                     </label>
                     <textarea
                       rows={2}
@@ -602,7 +602,7 @@ ${evidenceNote ? `- Supporting Note: ${evidenceNote}` : ''}
 
                   <div>
                     <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#15803d', display: 'block', marginBottom: 4 }}>
-                      Expected Outcome / Deliverable (What defines completion?) *
+                      Expected Outcome *
                     </label>
                     <input
                       type="text"
@@ -619,14 +619,14 @@ ${evidenceNote ? `- Supporting Note: ${evidenceNote}` : ''}
               <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1.25rem', boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
                 <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#003366', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: 6 }}>
                   <UserCheck size={16} style={{ color: '#00509d' }} />
-                  3. Controlled Ownership, Reviewer & SLA
+                  3. Assignment & Review
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1fr', gap: '0.75rem' }}>
                   {/* Role */}
                   <div>
                     <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4 }}>
-                      Responsible Role *
+                      Responsible Person's Role *
                     </label>
                     <select
                       value={responsibleRole}
@@ -642,7 +642,7 @@ ${evidenceNote ? `- Supporting Note: ${evidenceNote}` : ''}
                   {/* Assignee Dropdown */}
                   <div>
                     <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4 }}>
-                      Assigned To (Controlled Roster) *
+                      Assign To *
                     </label>
                     <select
                       value={assignedToPmId}
@@ -650,7 +650,7 @@ ${evidenceNote ? `- Supporting Note: ${evidenceNote}` : ''}
                       style={{ width: '100%', padding: '7px 10px', fontSize: '0.8rem', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#fff' }}
                     >
                       <option value="">
-                        {selectedProject ? `Default: ${selectedProject.prjMgrName || 'Project PM'}` : '-- Choose Assignee --'}
+                        {selectedProject ? `Default: ${selectedProject.prjMgrName || 'Project PM'}` : 'Choose a person'}
                       </option>
                       {pmList.map(pm => (
                         <option key={pm.prjMgrId} value={pm.prjMgrId}>
@@ -678,104 +678,7 @@ ${evidenceNote ? `- Supporting Note: ${evidenceNote}` : ''}
                 </div>
               </div>
 
-              {/* ── Section 4: Governance & Impact ── */}
-              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1.25rem', boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
-                <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#003366', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <AlertTriangle size={16} style={{ color: '#00509d' }} />
-                  4. Governance Trigger & Business Impact
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
-                  <div>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4 }}>
-                      Ticket Trigger / Origin
-                    </label>
-                    <select
-                      value={trigger}
-                      onChange={e => setTrigger(e.target.value)}
-                      style={{ width: '100%', padding: '7px 10px', fontSize: '0.8rem', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#fff' }}
-                    >
-                      <option value="Management Review Meeting">Management Review Meeting</option>
-                      <option value="System Alert">PO Expiry System Alert</option>
-                      <option value="Financial Alert">Financial Dues Alert</option>
-                      <option value="PMC Escalation">PMC Tower Escalation</option>
-                      <option value="Audit Observation">Compliance / Audit Observation</option>
-                      <option value="Customer Request">Client Ministry Request</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4 }}>
-                      Reference Meeting MOM / Letter # (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Weekly Review MOM/2026/08/18"
-                      value={referenceNo}
-                      onChange={e => setReferenceNo(e.target.value)}
-                      style={{ width: '100%', padding: '7px 10px', fontSize: '0.8rem', borderRadius: '6px', border: '1px solid #cbd5e1' }}
-                    />
-                  </div>
-                </div>
-
-                {/* Impact Tags */}
-                <div style={{ marginBottom: '1rem' }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: 6 }}>
-                    Business Impact Areas
-                  </label>
-                  <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                    {['Financial', 'Schedule', 'Compliance', 'Customer', 'Vendor', 'Revenue', 'Reputation'].map(tag => {
-                      const isSel = impacts.includes(tag);
-                      return (
-                        <button
-                          key={tag}
-                          type="button"
-                          onClick={() => toggleImpact(tag)}
-                          style={{
-                            padding: '4px 10px', fontSize: '0.72rem', fontWeight: 700, borderRadius: '20px',
-                            border: isSel ? '1px solid #003366' : '1px solid #cbd5e1',
-                            background: isSel ? '#003366' : '#f8fafc',
-                            color: isSel ? '#ffffff' : '#475569',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          {isSel ? '☑' : '☐'} {tag}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Conditional Amount at Risk */}
-                {impacts.includes('Financial') && (
-                  <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '0.75rem', marginBottom: '1rem' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#b45309', display: 'block', marginBottom: 4 }}>
-                      💰 Business Amount at Risk (₹ Cr)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. 5.88"
-                      value={amountAtRisk}
-                      onChange={e => setAmountAtRisk(e.target.value)}
-                      style={{ width: '200px', padding: '6px 10px', fontSize: '0.8rem', borderRadius: '6px', border: '1px solid #fcd34d' }}
-                    />
-                  </div>
-                )}
-
-                {/* Blocker */}
-                <div>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4 }}>
-                    Current Blocker / Dependency (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Awaiting client ministry approval signature."
-                    value={blockerDependency}
-                    onChange={e => setBlockerDependency(e.target.value)}
-                    style={{ width: '100%', padding: '7px 10px', fontSize: '0.8rem', borderRadius: '6px', border: '1px solid #cbd5e1' }}
-                  />
-                </div>
-              </div>
+              {/* Removed: Section 4 Governance Trigger & Business Impact */}
 
               {/* Error Message display */}
               {errorMsg && (
@@ -805,7 +708,7 @@ ${evidenceNote ? `- Supporting Note: ${evidenceNote}` : ''}
                     display: 'inline-flex', alignItems: 'center', gap: '8px'
                   }}
                 >
-                  {submitting ? 'Creating Ticket…' : 'Create Management Ticket →'}
+                  {submitting ? 'Raising Ticket…' : 'Raise a ticket →'}
                 </button>
               </div>
 
