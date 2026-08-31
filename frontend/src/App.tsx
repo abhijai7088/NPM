@@ -55,7 +55,7 @@ function App() {
           </Route>
         </Route>
 
-        <Route element={<ProtectedRoute allowedRoles={['MD','PM','PMC','OA','SUPER_ADMIN']} />}>
+        <Route element={<ProtectedRoute allowedRoles={['MD','PM','PMC','SUPER_ADMIN']} />}>
           <Route element={<AppShell />}>
             <Route path="/po-expiry-alerts" element={<Suspense fallback={<PageLoader />}><PoExpiryAlertsPage /></Suspense>} />
             <Route path="/projects/:headerId" element={<Suspense fallback={<PageLoader />}><Project360Page /></Suspense>} />
