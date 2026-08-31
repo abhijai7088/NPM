@@ -1,6 +1,5 @@
 package com.npms.core.security;
 
-import com.npms.core.exception.ForbiddenScopeException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -38,7 +37,8 @@ public class TicketResourceScopeFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
         String path = request.getRequestURI();
-        if (!path.startsWith(request.getContextPath() + "/api/v1/tickets")) {
+        String prefix = request.getContextPath() + "/api/v1/tickets";
+        if (!path.startsWith(prefix)) {
             filterChain.doFilter(request, response);
             return;
         }
@@ -50,74 +50,72 @@ public class TicketResourceScopeFilter extends OncePerRequestFilter {
         }
 
         AccessScope scope = scopeResolver.resolve(authentication);
-        String relative = path.substring((request.getContextPath() + "/api/v1/tickets").length());
+        String relative = path.substring(prefix.length());
 
-        // Personal queue is OA-only. It must never become a convenient org-wide endpoint.
         if (relative.equals("/my-tasks") || relative.equals("/my-tasks/")) {
-            if (!scope.isOa()) throw ForbiddenScopeException.forResource("OA personal task queue");
+            if (!scope.isOa()) { deny(response, "OA personal task queue"); return; }
             filterChain.doFilter(request, response);
             return;
         }
 
-        // Organisation-wide exception endpoints are restricted to monitoring/management roles.
         if (relative.equals("/overdue") || relative.equals("/overdue/") ||
             relative.equals("/escalated") || relative.equals("/escalated/") ||
             relative.equals("/priority-summary") || relative.equals("/priority-summary/")) {
             if (!scope.isMd() && !scope.isPmc() && !scope.isSuperAdmin()) {
-                throw ForbiddenScopeException.forResource("ticket monitoring endpoint");
+                deny(response, "ticket monitoring endpoint");
+                return;
             }
             filterChain.doFilter(request, response);
             return;
         }
 
-        // Protect /{ticketId} and every action below it: /status, /assign, /events, etc.
         String[] parts = relative.split("/");
         if (parts.length >= 2 && isLong(parts[1])) {
             long ticketId = Long.parseLong(parts[1]);
-            assertTicketAccess(scope, ticketId);
+            if (!hasTicketAccess(scope, ticketId)) {
+                deny(response, "this ticket");
+                return;
+            }
         }
 
-        // OA cannot create a ticket; keep this server-side even if the frontend hides the action.
         if ("POST".equalsIgnoreCase(request.getMethod()) &&
             (relative.equals("") || relative.equals("/")) && scope.isOa()) {
-            throw ForbiddenScopeException.forResource("ticket creation");
+            deny(response, "ticket creation");
+            return;
         }
 
         filterChain.doFilter(request, response);
     }
 
-    private void assertTicketAccess(AccessScope scope, long ticketId) {
-        if (scope.isUnrestricted() || scope.isPmc()) return;
+    private boolean hasTicketAccess(AccessScope scope, long ticketId) {
+        if (scope.isUnrestricted() || scope.isPmc()) return true;
 
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
-                "SELECT t.header_id, t.assigned_to, p.prj_mgr_id " +
+                "SELECT t.assigned_to, p.prj_mgr_id " +
                 "FROM public.project_ticket t " +
                 "LEFT JOIN public.xx_nic_pm_prj_list p ON p.header_id = t.header_id " +
                 "WHERE t.id = ? LIMIT 1", ticketId);
 
-        if (rows.isEmpty()) {
-            // Let the controller/service produce the canonical NOT_FOUND response.
-            return;
-        }
+        if (rows.isEmpty()) return true; // controller returns canonical NOT_FOUND
 
         Map<String, Object> row = rows.get(0);
         String assignedTo = row.get("assigned_to") == null ? null : String.valueOf(row.get("assigned_to"));
-        Long prjMgrId = row.get("prj_mgr_id") instanceof Number
-                ? ((Number) row.get("prj_mgr_id")).longValue() : null;
+        Long prjMgrId = row.get("prj_mgr_id") instanceof Number ? ((Number) row.get("prj_mgr_id")).longValue() : null;
 
-        if (scope.isOa()) {
-            if (assignedTo == null || !scope.username().equalsIgnoreCase(assignedTo)) {
-                throw ForbiddenScopeException.forResource("this ticket");
-            }
-            return;
-        }
+        if (scope.isOa()) return assignedTo != null && scope.username().equalsIgnoreCase(assignedTo);
 
         if (scope.isPm() || scope.isMd()) {
             List<Long> allowed = scope.allowedPrjMgrIds();
-            if (prjMgrId == null || allowed == null || !allowed.contains(prjMgrId)) {
-                throw ForbiddenScopeException.forResource("this ticket's project");
-            }
+            return prjMgrId != null && allowed != null && allowed.contains(prjMgrId);
         }
+        return false;
+    }
+
+    private void deny(HttpServletResponse response, String resource) throws IOException {
+        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+        response.setContentType("application/json");
+        response.getWriter().write("{\"success\":false,\"error\":\"FORBIDDEN_SCOPE\",\"message\":\"Access denied for " +
+                resource.replace("\"", "'") + "\"}");
     }
 
     private boolean isLong(String value) {
